@@ -224,7 +224,6 @@ def plot_noise():
     random.seed(0)
     stats['layer_pos'] = stats['layer_pos'].apply(lambda d: d + (random.random() - 0.5) * 0.7)
 
-    print(stats.head().to_string())
     stats = stats[stats['is_validation']]
     stats = stats[~stats['layer'].str.contains('.conv')]
 
@@ -249,7 +248,7 @@ def plot_noise():
     stats_grouped['psize'] = stats_grouped['epoch'] / 10
     column_color = ('sdice_score', 'mean')
     #stats_grouped['fold_train_id'] = pd.factorize(stats_grouped['fold_train'], sort=True)[0]
-    column_color = 'fold_train_id'
+    #column_color = 'fold_train_id'
 
     for column in columns:
         fig, axes = hlp.create_scatter_plot(
