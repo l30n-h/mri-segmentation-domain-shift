@@ -1,0 +1,1816 @@
+{
+    "name": "CC359",
+    "description": "brain segmentation methods",
+    "reference": "University of Calgary, University of Campinas",
+    "licence": "Creative Commons Attribution-NoDerivatives 4.0 International Public License",
+    "relase": "16 December 2021",
+    "tensorImageSize": "4D",
+    "modality": {
+        "0": "T1"
+    },
+    "labels": {
+        "0": "background",
+        "1": "brain"
+    },
+    "numTraining": 359,
+    "numTest": 359,
+    "training": [
+        {
+            "image": "./imagesTr/CC0001_philips_15_55_M.nii.gz",
+            "label": "./labelsTr/CC0001_philips_15_55_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0002_philips_15_56_M.nii.gz",
+            "label": "./labelsTr/CC0002_philips_15_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0003_philips_15_63_F.nii.gz",
+            "label": "./labelsTr/CC0003_philips_15_63_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0004_philips_15_67_M.nii.gz",
+            "label": "./labelsTr/CC0004_philips_15_67_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0005_philips_15_62_M.nii.gz",
+            "label": "./labelsTr/CC0005_philips_15_62_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0006_philips_15_63_F.nii.gz",
+            "label": "./labelsTr/CC0006_philips_15_63_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0007_philips_15_62_M.nii.gz",
+            "label": "./labelsTr/CC0007_philips_15_62_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0008_philips_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0008_philips_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0009_philips_15_69_M.nii.gz",
+            "label": "./labelsTr/CC0009_philips_15_69_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0010_philips_15_69_F.nii.gz",
+            "label": "./labelsTr/CC0010_philips_15_69_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0011_philips_15_49_F.nii.gz",
+            "label": "./labelsTr/CC0011_philips_15_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0012_philips_15_43_M.nii.gz",
+            "label": "./labelsTr/CC0012_philips_15_43_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0013_philips_15_66_M.nii.gz",
+            "label": "./labelsTr/CC0013_philips_15_66_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0014_philips_15_62_F.nii.gz",
+            "label": "./labelsTr/CC0014_philips_15_62_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0015_philips_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0015_philips_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0016_philips_15_55_M.nii.gz",
+            "label": "./labelsTr/CC0016_philips_15_55_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0017_philips_15_50_F.nii.gz",
+            "label": "./labelsTr/CC0017_philips_15_50_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0018_philips_15_41_F.nii.gz",
+            "label": "./labelsTr/CC0018_philips_15_41_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0019_philips_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0019_philips_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0020_philips_15_65_F.nii.gz",
+            "label": "./labelsTr/CC0020_philips_15_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0021_philips_15_48_F.nii.gz",
+            "label": "./labelsTr/CC0021_philips_15_48_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0022_philips_15_43_M.nii.gz",
+            "label": "./labelsTr/CC0022_philips_15_43_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0023_philips_15_43_M.nii.gz",
+            "label": "./labelsTr/CC0023_philips_15_43_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0024_philips_15_65_F.nii.gz",
+            "label": "./labelsTr/CC0024_philips_15_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0025_philips_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0025_philips_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0026_philips_15_65_M.nii.gz",
+            "label": "./labelsTr/CC0026_philips_15_65_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0027_philips_15_41_M.nii.gz",
+            "label": "./labelsTr/CC0027_philips_15_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0028_philips_15_63_F.nii.gz",
+            "label": "./labelsTr/CC0028_philips_15_63_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0029_philips_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0029_philips_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0030_philips_15_42_F.nii.gz",
+            "label": "./labelsTr/CC0030_philips_15_42_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0031_philips_15_65_F.nii.gz",
+            "label": "./labelsTr/CC0031_philips_15_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0032_philips_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0032_philips_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0033_philips_15_67_M.nii.gz",
+            "label": "./labelsTr/CC0033_philips_15_67_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0034_philips_15_43_F.nii.gz",
+            "label": "./labelsTr/CC0034_philips_15_43_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0035_philips_15_49_F.nii.gz",
+            "label": "./labelsTr/CC0035_philips_15_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0036_philips_15_49_F.nii.gz",
+            "label": "./labelsTr/CC0036_philips_15_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0037_philips_15_41_M.nii.gz",
+            "label": "./labelsTr/CC0037_philips_15_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0038_philips_15_41_F.nii.gz",
+            "label": "./labelsTr/CC0038_philips_15_41_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0039_philips_15_41_F.nii.gz",
+            "label": "./labelsTr/CC0039_philips_15_41_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0040_philips_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0040_philips_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0041_philips_15_61_F.nii.gz",
+            "label": "./labelsTr/CC0041_philips_15_61_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0042_philips_15_67_M.nii.gz",
+            "label": "./labelsTr/CC0042_philips_15_67_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0043_philips_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0043_philips_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0044_philips_15_36_M.nii.gz",
+            "label": "./labelsTr/CC0044_philips_15_36_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0045_philips_15_49_F.nii.gz",
+            "label": "./labelsTr/CC0045_philips_15_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0046_philips_15_42_M.nii.gz",
+            "label": "./labelsTr/CC0046_philips_15_42_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0047_philips_15_54_F.nii.gz",
+            "label": "./labelsTr/CC0047_philips_15_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0048_philips_15_53_M.nii.gz",
+            "label": "./labelsTr/CC0048_philips_15_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0049_philips_15_43_F.nii.gz",
+            "label": "./labelsTr/CC0049_philips_15_43_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0050_philips_15_45_M.nii.gz",
+            "label": "./labelsTr/CC0050_philips_15_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0051_philips_15_44_F.nii.gz",
+            "label": "./labelsTr/CC0051_philips_15_44_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0052_philips_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0052_philips_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0053_philips_15_39_F.nii.gz",
+            "label": "./labelsTr/CC0053_philips_15_39_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0054_philips_15_46_M.nii.gz",
+            "label": "./labelsTr/CC0054_philips_15_46_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0055_philips_15_44_F.nii.gz",
+            "label": "./labelsTr/CC0055_philips_15_44_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0056_philips_15_39_F.nii.gz",
+            "label": "./labelsTr/CC0056_philips_15_39_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0057_philips_15_61_F.nii.gz",
+            "label": "./labelsTr/CC0057_philips_15_61_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0058_philips_15_64_F.nii.gz",
+            "label": "./labelsTr/CC0058_philips_15_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0059_philips_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0059_philips_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0060_philips_3_29_M.nii.gz",
+            "label": "./labelsTr/CC0060_philips_3_29_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0061_philips_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0061_philips_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0062_philips_3_52_F.nii.gz",
+            "label": "./labelsTr/CC0062_philips_3_52_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0063_philips_3_53_M.nii.gz",
+            "label": "./labelsTr/CC0063_philips_3_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0064_philips_3_49_F.nii.gz",
+            "label": "./labelsTr/CC0064_philips_3_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0065_philips_3_42_F.nii.gz",
+            "label": "./labelsTr/CC0065_philips_3_42_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0066_philips_3_46_F.nii.gz",
+            "label": "./labelsTr/CC0066_philips_3_46_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0067_philips_3_57_F.nii.gz",
+            "label": "./labelsTr/CC0067_philips_3_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0068_philips_3_49_F.nii.gz",
+            "label": "./labelsTr/CC0068_philips_3_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0069_philips_3_56_F.nii.gz",
+            "label": "./labelsTr/CC0069_philips_3_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0070_philips_3_80_F.nii.gz",
+            "label": "./labelsTr/CC0070_philips_3_80_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0071_philips_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0071_philips_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0072_philips_3_31_M.nii.gz",
+            "label": "./labelsTr/CC0072_philips_3_31_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0073_philips_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0073_philips_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0074_philips_3_53_F.nii.gz",
+            "label": "./labelsTr/CC0074_philips_3_53_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0075_philips_3_41_M.nii.gz",
+            "label": "./labelsTr/CC0075_philips_3_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0076_philips_3_44_F.nii.gz",
+            "label": "./labelsTr/CC0076_philips_3_44_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0077_philips_3_43_F.nii.gz",
+            "label": "./labelsTr/CC0077_philips_3_43_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0078_philips_3_42_M.nii.gz",
+            "label": "./labelsTr/CC0078_philips_3_42_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0079_philips_3_47_F.nii.gz",
+            "label": "./labelsTr/CC0079_philips_3_47_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0080_philips_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0080_philips_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0081_philips_3_67_F.nii.gz",
+            "label": "./labelsTr/CC0081_philips_3_67_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0082_philips_3_64_F.nii.gz",
+            "label": "./labelsTr/CC0082_philips_3_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0083_philips_3_66_M.nii.gz",
+            "label": "./labelsTr/CC0083_philips_3_66_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0084_philips_3_46_M.nii.gz",
+            "label": "./labelsTr/CC0084_philips_3_46_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0085_philips_3_71_M.nii.gz",
+            "label": "./labelsTr/CC0085_philips_3_71_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0086_philips_3_42_F.nii.gz",
+            "label": "./labelsTr/CC0086_philips_3_42_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0087_philips_3_42_M.nii.gz",
+            "label": "./labelsTr/CC0087_philips_3_42_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0088_philips_3_51_F.nii.gz",
+            "label": "./labelsTr/CC0088_philips_3_51_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0089_philips_3_46_F.nii.gz",
+            "label": "./labelsTr/CC0089_philips_3_46_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0090_philips_3_37_M.nii.gz",
+            "label": "./labelsTr/CC0090_philips_3_37_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0091_philips_3_51_F.nii.gz",
+            "label": "./labelsTr/CC0091_philips_3_51_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0092_philips_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0092_philips_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0093_philips_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0093_philips_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0094_philips_3_45_M.nii.gz",
+            "label": "./labelsTr/CC0094_philips_3_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0095_philips_3_43_F.nii.gz",
+            "label": "./labelsTr/CC0095_philips_3_43_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0096_philips_3_36_M.nii.gz",
+            "label": "./labelsTr/CC0096_philips_3_36_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0097_philips_3_45_F.nii.gz",
+            "label": "./labelsTr/CC0097_philips_3_45_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0098_philips_3_48_F.nii.gz",
+            "label": "./labelsTr/CC0098_philips_3_48_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0099_philips_3_51_M.nii.gz",
+            "label": "./labelsTr/CC0099_philips_3_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0100_philips_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0100_philips_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0101_philips_3_52_F.nii.gz",
+            "label": "./labelsTr/CC0101_philips_3_52_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0102_philips_3_50_M.nii.gz",
+            "label": "./labelsTr/CC0102_philips_3_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0103_philips_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0103_philips_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0104_philips_3_34_M.nii.gz",
+            "label": "./labelsTr/CC0104_philips_3_34_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0105_philips_3_52_M.nii.gz",
+            "label": "./labelsTr/CC0105_philips_3_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0106_philips_3_41_F.nii.gz",
+            "label": "./labelsTr/CC0106_philips_3_41_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0107_philips_3_38_M.nii.gz",
+            "label": "./labelsTr/CC0107_philips_3_38_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0108_philips_3_51_M.nii.gz",
+            "label": "./labelsTr/CC0108_philips_3_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0109_philips_3_57_F.nii.gz",
+            "label": "./labelsTr/CC0109_philips_3_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0110_philips_3_44_F.nii.gz",
+            "label": "./labelsTr/CC0110_philips_3_44_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0111_philips_3_51_M.nii.gz",
+            "label": "./labelsTr/CC0111_philips_3_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0112_philips_3_60_M.nii.gz",
+            "label": "./labelsTr/CC0112_philips_3_60_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0113_philips_3_45_M.nii.gz",
+            "label": "./labelsTr/CC0113_philips_3_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0114_philips_3_60_M.nii.gz",
+            "label": "./labelsTr/CC0114_philips_3_60_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0115_philips_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0115_philips_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0116_philips_3_50_M.nii.gz",
+            "label": "./labelsTr/CC0116_philips_3_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0117_philips_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0117_philips_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0118_philips_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0118_philips_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0119_philips_3_53_M.nii.gz",
+            "label": "./labelsTr/CC0119_philips_3_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0120_siemens_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0120_siemens_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0121_siemens_15_61_M.nii.gz",
+            "label": "./labelsTr/CC0121_siemens_15_61_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0122_siemens_15_53_F.nii.gz",
+            "label": "./labelsTr/CC0122_siemens_15_53_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0123_siemens_15_58_M.nii.gz",
+            "label": "./labelsTr/CC0123_siemens_15_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0124_siemens_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0124_siemens_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0125_siemens_15_65_F.nii.gz",
+            "label": "./labelsTr/CC0125_siemens_15_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0126_siemens_15_54_F.nii.gz",
+            "label": "./labelsTr/CC0126_siemens_15_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0127_siemens_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0127_siemens_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0128_siemens_15_54_F.nii.gz",
+            "label": "./labelsTr/CC0128_siemens_15_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0129_siemens_15_54_F.nii.gz",
+            "label": "./labelsTr/CC0129_siemens_15_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0130_siemens_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0130_siemens_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0131_siemens_15_41_M.nii.gz",
+            "label": "./labelsTr/CC0131_siemens_15_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0132_siemens_15_71_F.nii.gz",
+            "label": "./labelsTr/CC0132_siemens_15_71_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0133_siemens_15_64_F.nii.gz",
+            "label": "./labelsTr/CC0133_siemens_15_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0134_siemens_15_54_F.nii.gz",
+            "label": "./labelsTr/CC0134_siemens_15_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0135_siemens_15_52_M.nii.gz",
+            "label": "./labelsTr/CC0135_siemens_15_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0136_siemens_15_64_F.nii.gz",
+            "label": "./labelsTr/CC0136_siemens_15_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0137_siemens_15_65_F.nii.gz",
+            "label": "./labelsTr/CC0137_siemens_15_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0138_siemens_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0138_siemens_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0139_siemens_15_56_M.nii.gz",
+            "label": "./labelsTr/CC0139_siemens_15_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0140_siemens_15_57_M.nii.gz",
+            "label": "./labelsTr/CC0140_siemens_15_57_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0141_siemens_15_53_F.nii.gz",
+            "label": "./labelsTr/CC0141_siemens_15_53_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0142_siemens_15_59_M.nii.gz",
+            "label": "./labelsTr/CC0142_siemens_15_59_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0143_siemens_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0143_siemens_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0144_siemens_15_43_M.nii.gz",
+            "label": "./labelsTr/CC0144_siemens_15_43_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0145_siemens_15_62_F.nii.gz",
+            "label": "./labelsTr/CC0145_siemens_15_62_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0146_siemens_15_38_M.nii.gz",
+            "label": "./labelsTr/CC0146_siemens_15_38_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0147_siemens_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0147_siemens_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0148_siemens_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0148_siemens_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0149_siemens_15_53_M.nii.gz",
+            "label": "./labelsTr/CC0149_siemens_15_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0150_siemens_15_47_M.nii.gz",
+            "label": "./labelsTr/CC0150_siemens_15_47_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0151_siemens_15_71_M.nii.gz",
+            "label": "./labelsTr/CC0151_siemens_15_71_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0152_siemens_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0152_siemens_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0153_siemens_15_52_F.nii.gz",
+            "label": "./labelsTr/CC0153_siemens_15_52_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0154_siemens_15_55_M.nii.gz",
+            "label": "./labelsTr/CC0154_siemens_15_55_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0155_siemens_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0155_siemens_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0156_siemens_15_55_M.nii.gz",
+            "label": "./labelsTr/CC0156_siemens_15_55_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0157_siemens_15_54_F.nii.gz",
+            "label": "./labelsTr/CC0157_siemens_15_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0158_siemens_15_53_M.nii.gz",
+            "label": "./labelsTr/CC0158_siemens_15_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0159_siemens_15_54_M.nii.gz",
+            "label": "./labelsTr/CC0159_siemens_15_54_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0160_siemens_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0160_siemens_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0161_siemens_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0161_siemens_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0162_siemens_15_39_M.nii.gz",
+            "label": "./labelsTr/CC0162_siemens_15_39_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0163_siemens_15_64_F.nii.gz",
+            "label": "./labelsTr/CC0163_siemens_15_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0164_siemens_15_54_M.nii.gz",
+            "label": "./labelsTr/CC0164_siemens_15_54_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0165_siemens_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0165_siemens_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0166_siemens_15_39_M.nii.gz",
+            "label": "./labelsTr/CC0166_siemens_15_39_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0167_siemens_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0167_siemens_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0168_siemens_15_38_M.nii.gz",
+            "label": "./labelsTr/CC0168_siemens_15_38_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0169_siemens_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0169_siemens_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0170_siemens_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0170_siemens_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0171_siemens_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0171_siemens_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0172_siemens_15_52_M.nii.gz",
+            "label": "./labelsTr/CC0172_siemens_15_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0173_siemens_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0173_siemens_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0174_siemens_15_41_M.nii.gz",
+            "label": "./labelsTr/CC0174_siemens_15_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0175_siemens_15_50_M.nii.gz",
+            "label": "./labelsTr/CC0175_siemens_15_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0176_siemens_15_45_M.nii.gz",
+            "label": "./labelsTr/CC0176_siemens_15_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0177_siemens_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0177_siemens_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0178_siemens_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0178_siemens_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0179_siemens_15_53_M.nii.gz",
+            "label": "./labelsTr/CC0179_siemens_15_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0180_siemens_3_39_F.nii.gz",
+            "label": "./labelsTr/CC0180_siemens_3_39_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0181_siemens_3_36_F.nii.gz",
+            "label": "./labelsTr/CC0181_siemens_3_36_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0182_siemens_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0182_siemens_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0183_siemens_3_58_M.nii.gz",
+            "label": "./labelsTr/CC0183_siemens_3_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0184_siemens_3_60_M.nii.gz",
+            "label": "./labelsTr/CC0184_siemens_3_60_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0185_siemens_3_52_M.nii.gz",
+            "label": "./labelsTr/CC0185_siemens_3_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0186_siemens_3_62_F.nii.gz",
+            "label": "./labelsTr/CC0186_siemens_3_62_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0187_siemens_3_63_F.nii.gz",
+            "label": "./labelsTr/CC0187_siemens_3_63_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0188_siemens_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0188_siemens_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0189_siemens_3_66_F.nii.gz",
+            "label": "./labelsTr/CC0189_siemens_3_66_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0190_siemens_3_63_F.nii.gz",
+            "label": "./labelsTr/CC0190_siemens_3_63_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0191_siemens_3_59_F.nii.gz",
+            "label": "./labelsTr/CC0191_siemens_3_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0192_siemens_3_51_M.nii.gz",
+            "label": "./labelsTr/CC0192_siemens_3_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0193_siemens_3_64_F.nii.gz",
+            "label": "./labelsTr/CC0193_siemens_3_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0194_siemens_3_67_M.nii.gz",
+            "label": "./labelsTr/CC0194_siemens_3_67_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0195_siemens_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0195_siemens_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0196_siemens_3_48_M.nii.gz",
+            "label": "./labelsTr/CC0196_siemens_3_48_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0197_siemens_3_54_M.nii.gz",
+            "label": "./labelsTr/CC0197_siemens_3_54_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0198_siemens_3_59_F.nii.gz",
+            "label": "./labelsTr/CC0198_siemens_3_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0199_siemens_3_64_F.nii.gz",
+            "label": "./labelsTr/CC0199_siemens_3_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0200_siemens_3_37_F.nii.gz",
+            "label": "./labelsTr/CC0200_siemens_3_37_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0201_siemens_3_58_F.nii.gz",
+            "label": "./labelsTr/CC0201_siemens_3_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0202_siemens_3_54_F.nii.gz",
+            "label": "./labelsTr/CC0202_siemens_3_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0203_siemens_3_56_F.nii.gz",
+            "label": "./labelsTr/CC0203_siemens_3_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0204_siemens_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0204_siemens_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0205_siemens_3_64_F.nii.gz",
+            "label": "./labelsTr/CC0205_siemens_3_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0206_siemens_3_58_M.nii.gz",
+            "label": "./labelsTr/CC0206_siemens_3_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0207_siemens_3_58_M.nii.gz",
+            "label": "./labelsTr/CC0207_siemens_3_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0208_siemens_3_56_F.nii.gz",
+            "label": "./labelsTr/CC0208_siemens_3_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0209_siemens_3_57_F.nii.gz",
+            "label": "./labelsTr/CC0209_siemens_3_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0210_siemens_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0210_siemens_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0211_siemens_3_65_F.nii.gz",
+            "label": "./labelsTr/CC0211_siemens_3_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0212_siemens_3_67_M.nii.gz",
+            "label": "./labelsTr/CC0212_siemens_3_67_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0213_siemens_3_65_F.nii.gz",
+            "label": "./labelsTr/CC0213_siemens_3_65_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0214_siemens_3_51_M.nii.gz",
+            "label": "./labelsTr/CC0214_siemens_3_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0215_siemens_3_46_F.nii.gz",
+            "label": "./labelsTr/CC0215_siemens_3_46_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0216_siemens_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0216_siemens_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0217_siemens_3_45_M.nii.gz",
+            "label": "./labelsTr/CC0217_siemens_3_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0218_siemens_3_61_M.nii.gz",
+            "label": "./labelsTr/CC0218_siemens_3_61_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0219_siemens_3_49_F.nii.gz",
+            "label": "./labelsTr/CC0219_siemens_3_49_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0220_siemens_3_61_M.nii.gz",
+            "label": "./labelsTr/CC0220_siemens_3_61_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0221_siemens_3_61_M.nii.gz",
+            "label": "./labelsTr/CC0221_siemens_3_61_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0222_siemens_3_56_F.nii.gz",
+            "label": "./labelsTr/CC0222_siemens_3_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0223_siemens_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0223_siemens_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0224_siemens_3_62_M.nii.gz",
+            "label": "./labelsTr/CC0224_siemens_3_62_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0225_siemens_3_47_F.nii.gz",
+            "label": "./labelsTr/CC0225_siemens_3_47_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0226_siemens_3_64_F.nii.gz",
+            "label": "./labelsTr/CC0226_siemens_3_64_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0227_siemens_3_58_M.nii.gz",
+            "label": "./labelsTr/CC0227_siemens_3_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0228_siemens_3_66_M.nii.gz",
+            "label": "./labelsTr/CC0228_siemens_3_66_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0229_siemens_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0229_siemens_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0230_siemens_3_60_M.nii.gz",
+            "label": "./labelsTr/CC0230_siemens_3_60_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0231_siemens_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0231_siemens_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0232_siemens_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0232_siemens_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0233_siemens_3_52_M.nii.gz",
+            "label": "./labelsTr/CC0233_siemens_3_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0234_siemens_3_57_M.nii.gz",
+            "label": "./labelsTr/CC0234_siemens_3_57_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0235_siemens_3_61_M.nii.gz",
+            "label": "./labelsTr/CC0235_siemens_3_61_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0236_siemens_3_50_M.nii.gz",
+            "label": "./labelsTr/CC0236_siemens_3_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0237_siemens_3_59_F.nii.gz",
+            "label": "./labelsTr/CC0237_siemens_3_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0238_siemens_3_58_M.nii.gz",
+            "label": "./labelsTr/CC0238_siemens_3_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0239_siemens_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0239_siemens_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0240_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0240_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0241_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0241_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0242_ge_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0242_ge_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0243_ge_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0243_ge_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0244_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0244_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0245_ge_15_48_M.nii.gz",
+            "label": "./labelsTr/CC0245_ge_15_48_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0246_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0246_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0247_ge_15_53_M.nii.gz",
+            "label": "./labelsTr/CC0247_ge_15_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0248_ge_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0248_ge_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0249_ge_15_58_F.nii.gz",
+            "label": "./labelsTr/CC0249_ge_15_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0250_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0250_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0251_ge_15_41_M.nii.gz",
+            "label": "./labelsTr/CC0251_ge_15_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0252_ge_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0252_ge_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0253_ge_15_58_M.nii.gz",
+            "label": "./labelsTr/CC0253_ge_15_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0254_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0254_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0255_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0255_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0256_ge_15_42_M.nii.gz",
+            "label": "./labelsTr/CC0256_ge_15_42_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0257_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0257_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0258_ge_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0258_ge_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0259_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0259_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0260_ge_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0260_ge_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0261_ge_15_59_F.nii.gz",
+            "label": "./labelsTr/CC0261_ge_15_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0262_ge_15_54_M.nii.gz",
+            "label": "./labelsTr/CC0262_ge_15_54_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0263_ge_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0263_ge_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0264_ge_15_59_F.nii.gz",
+            "label": "./labelsTr/CC0264_ge_15_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0265_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0265_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0266_ge_15_57_M.nii.gz",
+            "label": "./labelsTr/CC0266_ge_15_57_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0267_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0267_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0268_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0268_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0269_ge_15_59_M.nii.gz",
+            "label": "./labelsTr/CC0269_ge_15_59_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0270_ge_15_59_M.nii.gz",
+            "label": "./labelsTr/CC0270_ge_15_59_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0271_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0271_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0272_ge_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0272_ge_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0273_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0273_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0274_ge_15_47_M.nii.gz",
+            "label": "./labelsTr/CC0274_ge_15_47_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0275_ge_15_50_M.nii.gz",
+            "label": "./labelsTr/CC0275_ge_15_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0276_ge_15_52_M.nii.gz",
+            "label": "./labelsTr/CC0276_ge_15_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0277_ge_15_42_M.nii.gz",
+            "label": "./labelsTr/CC0277_ge_15_42_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0278_ge_15_61_F.nii.gz",
+            "label": "./labelsTr/CC0278_ge_15_61_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0279_ge_15_49_M.nii.gz",
+            "label": "./labelsTr/CC0279_ge_15_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0280_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0280_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0281_ge_15_56_M.nii.gz",
+            "label": "./labelsTr/CC0281_ge_15_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0282_ge_15_57_M.nii.gz",
+            "label": "./labelsTr/CC0282_ge_15_57_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0283_ge_15_44_M.nii.gz",
+            "label": "./labelsTr/CC0283_ge_15_44_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0284_ge_15_41_M.nii.gz",
+            "label": "./labelsTr/CC0284_ge_15_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0285_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0285_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0286_ge_15_55_F.nii.gz",
+            "label": "./labelsTr/CC0286_ge_15_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0287_ge_15_53_M.nii.gz",
+            "label": "./labelsTr/CC0287_ge_15_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0288_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0288_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0289_ge_15_59_F.nii.gz",
+            "label": "./labelsTr/CC0289_ge_15_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0290_ge_15_56_F.nii.gz",
+            "label": "./labelsTr/CC0290_ge_15_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0291_ge_15_48_M.nii.gz",
+            "label": "./labelsTr/CC0291_ge_15_48_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0292_ge_15_60_F.nii.gz",
+            "label": "./labelsTr/CC0292_ge_15_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0293_ge_15_50_M.nii.gz",
+            "label": "./labelsTr/CC0293_ge_15_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0294_ge_15_51_M.nii.gz",
+            "label": "./labelsTr/CC0294_ge_15_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0295_ge_15_55_M.nii.gz",
+            "label": "./labelsTr/CC0295_ge_15_55_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0296_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0296_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0297_ge_15_57_F.nii.gz",
+            "label": "./labelsTr/CC0297_ge_15_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0298_ge_15_58_M.nii.gz",
+            "label": "./labelsTr/CC0298_ge_15_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0299_ge_15_37_M.nii.gz",
+            "label": "./labelsTr/CC0299_ge_15_37_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0300_ge_3_58_M.nii.gz",
+            "label": "./labelsTr/CC0300_ge_3_58_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0301_ge_3_53_F.nii.gz",
+            "label": "./labelsTr/CC0301_ge_3_53_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0302_ge_3_56_F.nii.gz",
+            "label": "./labelsTr/CC0302_ge_3_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0303_ge_3_53_M.nii.gz",
+            "label": "./labelsTr/CC0303_ge_3_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0304_ge_3_57_F.nii.gz",
+            "label": "./labelsTr/CC0304_ge_3_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0305_ge_3_59_M.nii.gz",
+            "label": "./labelsTr/CC0305_ge_3_59_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0306_ge_3_52_M.nii.gz",
+            "label": "./labelsTr/CC0306_ge_3_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0307_ge_3_57_M.nii.gz",
+            "label": "./labelsTr/CC0307_ge_3_57_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0308_ge_3_52_F.nii.gz",
+            "label": "./labelsTr/CC0308_ge_3_52_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0309_ge_3_42_M.nii.gz",
+            "label": "./labelsTr/CC0309_ge_3_42_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0310_ge_3_51_F.nii.gz",
+            "label": "./labelsTr/CC0310_ge_3_51_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0311_ge_3_50_M.nii.gz",
+            "label": "./labelsTr/CC0311_ge_3_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0312_ge_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0312_ge_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0313_ge_3_34_M.nii.gz",
+            "label": "./labelsTr/CC0313_ge_3_34_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0314_ge_3_54_M.nii.gz",
+            "label": "./labelsTr/CC0314_ge_3_54_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0315_ge_3_59_M.nii.gz",
+            "label": "./labelsTr/CC0315_ge_3_59_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0316_ge_3_57_M.nii.gz",
+            "label": "./labelsTr/CC0316_ge_3_57_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0317_ge_3_45_M.nii.gz",
+            "label": "./labelsTr/CC0317_ge_3_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0318_ge_3_52_F.nii.gz",
+            "label": "./labelsTr/CC0318_ge_3_52_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0319_ge_3_45_M.nii.gz",
+            "label": "./labelsTr/CC0319_ge_3_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0320_ge_3_57_F.nii.gz",
+            "label": "./labelsTr/CC0320_ge_3_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0321_ge_3_51_F.nii.gz",
+            "label": "./labelsTr/CC0321_ge_3_51_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0322_ge_3_59_M.nii.gz",
+            "label": "./labelsTr/CC0322_ge_3_59_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0323_ge_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0323_ge_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0324_ge_3_56_M.nii.gz",
+            "label": "./labelsTr/CC0324_ge_3_56_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0325_ge_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0325_ge_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0326_ge_3_55_M.nii.gz",
+            "label": "./labelsTr/CC0326_ge_3_55_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0327_ge_3_50_M.nii.gz",
+            "label": "./labelsTr/CC0327_ge_3_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0328_ge_3_56_F.nii.gz",
+            "label": "./labelsTr/CC0328_ge_3_56_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0329_ge_3_58_F.nii.gz",
+            "label": "./labelsTr/CC0329_ge_3_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0330_ge_3_57_F.nii.gz",
+            "label": "./labelsTr/CC0330_ge_3_57_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0331_ge_3_61_F.nii.gz",
+            "label": "./labelsTr/CC0331_ge_3_61_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0332_ge_3_53_F.nii.gz",
+            "label": "./labelsTr/CC0332_ge_3_53_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0333_ge_3_41_M.nii.gz",
+            "label": "./labelsTr/CC0333_ge_3_41_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0334_ge_3_45_M.nii.gz",
+            "label": "./labelsTr/CC0334_ge_3_45_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0335_ge_3_54_F.nii.gz",
+            "label": "./labelsTr/CC0335_ge_3_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0336_ge_3_53_F.nii.gz",
+            "label": "./labelsTr/CC0336_ge_3_53_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0337_ge_3_59_F.nii.gz",
+            "label": "./labelsTr/CC0337_ge_3_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0338_ge_3_51_M.nii.gz",
+            "label": "./labelsTr/CC0338_ge_3_51_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0339_ge_3_59_F.nii.gz",
+            "label": "./labelsTr/CC0339_ge_3_59_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0340_ge_3_49_M.nii.gz",
+            "label": "./labelsTr/CC0340_ge_3_49_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0341_ge_3_60_M.nii.gz",
+            "label": "./labelsTr/CC0341_ge_3_60_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0342_ge_3_50_M.nii.gz",
+            "label": "./labelsTr/CC0342_ge_3_50_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0343_ge_3_54_F.nii.gz",
+            "label": "./labelsTr/CC0343_ge_3_54_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0344_ge_3_43_M.nii.gz",
+            "label": "./labelsTr/CC0344_ge_3_43_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0345_ge_3_53_M.nii.gz",
+            "label": "./labelsTr/CC0345_ge_3_53_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0346_ge_3_43_M.nii.gz",
+            "label": "./labelsTr/CC0346_ge_3_43_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0347_ge_3_52_F.nii.gz",
+            "label": "./labelsTr/CC0347_ge_3_52_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0348_ge_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0348_ge_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0349_ge_3_60_F.nii.gz",
+            "label": "./labelsTr/CC0349_ge_3_60_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0350_ge_3_62_F.nii.gz",
+            "label": "./labelsTr/CC0350_ge_3_62_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0351_ge_3_52_M.nii.gz",
+            "label": "./labelsTr/CC0351_ge_3_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0352_ge_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0352_ge_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0353_ge_3_58_F.nii.gz",
+            "label": "./labelsTr/CC0353_ge_3_58_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0354_ge_3_61_F.nii.gz",
+            "label": "./labelsTr/CC0354_ge_3_61_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0355_ge_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0355_ge_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0356_ge_3_61_F.nii.gz",
+            "label": "./labelsTr/CC0356_ge_3_61_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0357_ge_3_55_F.nii.gz",
+            "label": "./labelsTr/CC0357_ge_3_55_F.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0358_ge_3_52_M.nii.gz",
+            "label": "./labelsTr/CC0358_ge_3_52_M.nii.gz"
+        },
+        {
+            "image": "./imagesTr/CC0359_ge_3_58_F.nii.gz",
+            "label": "./labelsTr/CC0359_ge_3_58_F.nii.gz"
+        }
+    ],
+    "test": [
+        "./imagesTs/CC0001_philips_15_55_M.nii.gz",
+        "./imagesTs/CC0002_philips_15_56_M.nii.gz",
+        "./imagesTs/CC0003_philips_15_63_F.nii.gz",
+        "./imagesTs/CC0004_philips_15_67_M.nii.gz",
+        "./imagesTs/CC0005_philips_15_62_M.nii.gz",
+        "./imagesTs/CC0006_philips_15_63_F.nii.gz",
+        "./imagesTs/CC0007_philips_15_62_M.nii.gz",
+        "./imagesTs/CC0008_philips_15_60_F.nii.gz",
+        "./imagesTs/CC0009_philips_15_69_M.nii.gz",
+        "./imagesTs/CC0010_philips_15_69_F.nii.gz",
+        "./imagesTs/CC0011_philips_15_49_F.nii.gz",
+        "./imagesTs/CC0012_philips_15_43_M.nii.gz",
+        "./imagesTs/CC0013_philips_15_66_M.nii.gz",
+        "./imagesTs/CC0014_philips_15_62_F.nii.gz",
+        "./imagesTs/CC0015_philips_15_44_M.nii.gz",
+        "./imagesTs/CC0016_philips_15_55_M.nii.gz",
+        "./imagesTs/CC0017_philips_15_50_F.nii.gz",
+        "./imagesTs/CC0018_philips_15_41_F.nii.gz",
+        "./imagesTs/CC0019_philips_15_57_F.nii.gz",
+        "./imagesTs/CC0020_philips_15_65_F.nii.gz",
+        "./imagesTs/CC0021_philips_15_48_F.nii.gz",
+        "./imagesTs/CC0022_philips_15_43_M.nii.gz",
+        "./imagesTs/CC0023_philips_15_43_M.nii.gz",
+        "./imagesTs/CC0024_philips_15_65_F.nii.gz",
+        "./imagesTs/CC0025_philips_15_51_M.nii.gz",
+        "./imagesTs/CC0026_philips_15_65_M.nii.gz",
+        "./imagesTs/CC0027_philips_15_41_M.nii.gz",
+        "./imagesTs/CC0028_philips_15_63_F.nii.gz",
+        "./imagesTs/CC0029_philips_15_51_M.nii.gz",
+        "./imagesTs/CC0030_philips_15_42_F.nii.gz",
+        "./imagesTs/CC0031_philips_15_65_F.nii.gz",
+        "./imagesTs/CC0032_philips_15_44_M.nii.gz",
+        "./imagesTs/CC0033_philips_15_67_M.nii.gz",
+        "./imagesTs/CC0034_philips_15_43_F.nii.gz",
+        "./imagesTs/CC0035_philips_15_49_F.nii.gz",
+        "./imagesTs/CC0036_philips_15_49_F.nii.gz",
+        "./imagesTs/CC0037_philips_15_41_M.nii.gz",
+        "./imagesTs/CC0038_philips_15_41_F.nii.gz",
+        "./imagesTs/CC0039_philips_15_41_F.nii.gz",
+        "./imagesTs/CC0040_philips_15_55_F.nii.gz",
+        "./imagesTs/CC0041_philips_15_61_F.nii.gz",
+        "./imagesTs/CC0042_philips_15_67_M.nii.gz",
+        "./imagesTs/CC0043_philips_15_58_F.nii.gz",
+        "./imagesTs/CC0044_philips_15_36_M.nii.gz",
+        "./imagesTs/CC0045_philips_15_49_F.nii.gz",
+        "./imagesTs/CC0046_philips_15_42_M.nii.gz",
+        "./imagesTs/CC0047_philips_15_54_F.nii.gz",
+        "./imagesTs/CC0048_philips_15_53_M.nii.gz",
+        "./imagesTs/CC0049_philips_15_43_F.nii.gz",
+        "./imagesTs/CC0050_philips_15_45_M.nii.gz",
+        "./imagesTs/CC0051_philips_15_44_F.nii.gz",
+        "./imagesTs/CC0052_philips_15_51_M.nii.gz",
+        "./imagesTs/CC0053_philips_15_39_F.nii.gz",
+        "./imagesTs/CC0054_philips_15_46_M.nii.gz",
+        "./imagesTs/CC0055_philips_15_44_F.nii.gz",
+        "./imagesTs/CC0056_philips_15_39_F.nii.gz",
+        "./imagesTs/CC0057_philips_15_61_F.nii.gz",
+        "./imagesTs/CC0058_philips_15_64_F.nii.gz",
+        "./imagesTs/CC0059_philips_15_55_F.nii.gz",
+        "./imagesTs/CC0060_philips_3_29_M.nii.gz",
+        "./imagesTs/CC0061_philips_3_55_F.nii.gz",
+        "./imagesTs/CC0062_philips_3_52_F.nii.gz",
+        "./imagesTs/CC0063_philips_3_53_M.nii.gz",
+        "./imagesTs/CC0064_philips_3_49_F.nii.gz",
+        "./imagesTs/CC0065_philips_3_42_F.nii.gz",
+        "./imagesTs/CC0066_philips_3_46_F.nii.gz",
+        "./imagesTs/CC0067_philips_3_57_F.nii.gz",
+        "./imagesTs/CC0068_philips_3_49_F.nii.gz",
+        "./imagesTs/CC0069_philips_3_56_F.nii.gz",
+        "./imagesTs/CC0070_philips_3_80_F.nii.gz",
+        "./imagesTs/CC0071_philips_3_56_M.nii.gz",
+        "./imagesTs/CC0072_philips_3_31_M.nii.gz",
+        "./imagesTs/CC0073_philips_3_49_M.nii.gz",
+        "./imagesTs/CC0074_philips_3_53_F.nii.gz",
+        "./imagesTs/CC0075_philips_3_41_M.nii.gz",
+        "./imagesTs/CC0076_philips_3_44_F.nii.gz",
+        "./imagesTs/CC0077_philips_3_43_F.nii.gz",
+        "./imagesTs/CC0078_philips_3_42_M.nii.gz",
+        "./imagesTs/CC0079_philips_3_47_F.nii.gz",
+        "./imagesTs/CC0080_philips_3_55_F.nii.gz",
+        "./imagesTs/CC0081_philips_3_67_F.nii.gz",
+        "./imagesTs/CC0082_philips_3_64_F.nii.gz",
+        "./imagesTs/CC0083_philips_3_66_M.nii.gz",
+        "./imagesTs/CC0084_philips_3_46_M.nii.gz",
+        "./imagesTs/CC0085_philips_3_71_M.nii.gz",
+        "./imagesTs/CC0086_philips_3_42_F.nii.gz",
+        "./imagesTs/CC0087_philips_3_42_M.nii.gz",
+        "./imagesTs/CC0088_philips_3_51_F.nii.gz",
+        "./imagesTs/CC0089_philips_3_46_F.nii.gz",
+        "./imagesTs/CC0090_philips_3_37_M.nii.gz",
+        "./imagesTs/CC0091_philips_3_51_F.nii.gz",
+        "./imagesTs/CC0092_philips_3_60_F.nii.gz",
+        "./imagesTs/CC0093_philips_3_60_F.nii.gz",
+        "./imagesTs/CC0094_philips_3_45_M.nii.gz",
+        "./imagesTs/CC0095_philips_3_43_F.nii.gz",
+        "./imagesTs/CC0096_philips_3_36_M.nii.gz",
+        "./imagesTs/CC0097_philips_3_45_F.nii.gz",
+        "./imagesTs/CC0098_philips_3_48_F.nii.gz",
+        "./imagesTs/CC0099_philips_3_51_M.nii.gz",
+        "./imagesTs/CC0100_philips_3_60_F.nii.gz",
+        "./imagesTs/CC0101_philips_3_52_F.nii.gz",
+        "./imagesTs/CC0102_philips_3_50_M.nii.gz",
+        "./imagesTs/CC0103_philips_3_56_M.nii.gz",
+        "./imagesTs/CC0104_philips_3_34_M.nii.gz",
+        "./imagesTs/CC0105_philips_3_52_M.nii.gz",
+        "./imagesTs/CC0106_philips_3_41_F.nii.gz",
+        "./imagesTs/CC0107_philips_3_38_M.nii.gz",
+        "./imagesTs/CC0108_philips_3_51_M.nii.gz",
+        "./imagesTs/CC0109_philips_3_57_F.nii.gz",
+        "./imagesTs/CC0110_philips_3_44_F.nii.gz",
+        "./imagesTs/CC0111_philips_3_51_M.nii.gz",
+        "./imagesTs/CC0112_philips_3_60_M.nii.gz",
+        "./imagesTs/CC0113_philips_3_45_M.nii.gz",
+        "./imagesTs/CC0114_philips_3_60_M.nii.gz",
+        "./imagesTs/CC0115_philips_3_49_M.nii.gz",
+        "./imagesTs/CC0116_philips_3_50_M.nii.gz",
+        "./imagesTs/CC0117_philips_3_49_M.nii.gz",
+        "./imagesTs/CC0118_philips_3_49_M.nii.gz",
+        "./imagesTs/CC0119_philips_3_53_M.nii.gz",
+        "./imagesTs/CC0120_siemens_15_58_F.nii.gz",
+        "./imagesTs/CC0121_siemens_15_61_M.nii.gz",
+        "./imagesTs/CC0122_siemens_15_53_F.nii.gz",
+        "./imagesTs/CC0123_siemens_15_58_M.nii.gz",
+        "./imagesTs/CC0124_siemens_15_57_F.nii.gz",
+        "./imagesTs/CC0125_siemens_15_65_F.nii.gz",
+        "./imagesTs/CC0126_siemens_15_54_F.nii.gz",
+        "./imagesTs/CC0127_siemens_15_58_F.nii.gz",
+        "./imagesTs/CC0128_siemens_15_54_F.nii.gz",
+        "./imagesTs/CC0129_siemens_15_54_F.nii.gz",
+        "./imagesTs/CC0130_siemens_15_57_F.nii.gz",
+        "./imagesTs/CC0131_siemens_15_41_M.nii.gz",
+        "./imagesTs/CC0132_siemens_15_71_F.nii.gz",
+        "./imagesTs/CC0133_siemens_15_64_F.nii.gz",
+        "./imagesTs/CC0134_siemens_15_54_F.nii.gz",
+        "./imagesTs/CC0135_siemens_15_52_M.nii.gz",
+        "./imagesTs/CC0136_siemens_15_64_F.nii.gz",
+        "./imagesTs/CC0137_siemens_15_65_F.nii.gz",
+        "./imagesTs/CC0138_siemens_15_56_F.nii.gz",
+        "./imagesTs/CC0139_siemens_15_56_M.nii.gz",
+        "./imagesTs/CC0140_siemens_15_57_M.nii.gz",
+        "./imagesTs/CC0141_siemens_15_53_F.nii.gz",
+        "./imagesTs/CC0142_siemens_15_59_M.nii.gz",
+        "./imagesTs/CC0143_siemens_15_55_F.nii.gz",
+        "./imagesTs/CC0144_siemens_15_43_M.nii.gz",
+        "./imagesTs/CC0145_siemens_15_62_F.nii.gz",
+        "./imagesTs/CC0146_siemens_15_38_M.nii.gz",
+        "./imagesTs/CC0147_siemens_15_58_F.nii.gz",
+        "./imagesTs/CC0148_siemens_15_58_F.nii.gz",
+        "./imagesTs/CC0149_siemens_15_53_M.nii.gz",
+        "./imagesTs/CC0150_siemens_15_47_M.nii.gz",
+        "./imagesTs/CC0151_siemens_15_71_M.nii.gz",
+        "./imagesTs/CC0152_siemens_15_51_M.nii.gz",
+        "./imagesTs/CC0153_siemens_15_52_F.nii.gz",
+        "./imagesTs/CC0154_siemens_15_55_M.nii.gz",
+        "./imagesTs/CC0155_siemens_15_57_F.nii.gz",
+        "./imagesTs/CC0156_siemens_15_55_M.nii.gz",
+        "./imagesTs/CC0157_siemens_15_54_F.nii.gz",
+        "./imagesTs/CC0158_siemens_15_53_M.nii.gz",
+        "./imagesTs/CC0159_siemens_15_54_M.nii.gz",
+        "./imagesTs/CC0160_siemens_15_57_F.nii.gz",
+        "./imagesTs/CC0161_siemens_15_55_F.nii.gz",
+        "./imagesTs/CC0162_siemens_15_39_M.nii.gz",
+        "./imagesTs/CC0163_siemens_15_64_F.nii.gz",
+        "./imagesTs/CC0164_siemens_15_54_M.nii.gz",
+        "./imagesTs/CC0165_siemens_15_44_M.nii.gz",
+        "./imagesTs/CC0166_siemens_15_39_M.nii.gz",
+        "./imagesTs/CC0167_siemens_15_55_F.nii.gz",
+        "./imagesTs/CC0168_siemens_15_38_M.nii.gz",
+        "./imagesTs/CC0169_siemens_15_44_M.nii.gz",
+        "./imagesTs/CC0170_siemens_15_55_F.nii.gz",
+        "./imagesTs/CC0171_siemens_15_51_M.nii.gz",
+        "./imagesTs/CC0172_siemens_15_52_M.nii.gz",
+        "./imagesTs/CC0173_siemens_15_51_M.nii.gz",
+        "./imagesTs/CC0174_siemens_15_41_M.nii.gz",
+        "./imagesTs/CC0175_siemens_15_50_M.nii.gz",
+        "./imagesTs/CC0176_siemens_15_45_M.nii.gz",
+        "./imagesTs/CC0177_siemens_15_57_F.nii.gz",
+        "./imagesTs/CC0178_siemens_15_55_F.nii.gz",
+        "./imagesTs/CC0179_siemens_15_53_M.nii.gz",
+        "./imagesTs/CC0180_siemens_3_39_F.nii.gz",
+        "./imagesTs/CC0181_siemens_3_36_F.nii.gz",
+        "./imagesTs/CC0182_siemens_3_60_F.nii.gz",
+        "./imagesTs/CC0183_siemens_3_58_M.nii.gz",
+        "./imagesTs/CC0184_siemens_3_60_M.nii.gz",
+        "./imagesTs/CC0185_siemens_3_52_M.nii.gz",
+        "./imagesTs/CC0186_siemens_3_62_F.nii.gz",
+        "./imagesTs/CC0187_siemens_3_63_F.nii.gz",
+        "./imagesTs/CC0188_siemens_3_55_F.nii.gz",
+        "./imagesTs/CC0189_siemens_3_66_F.nii.gz",
+        "./imagesTs/CC0190_siemens_3_63_F.nii.gz",
+        "./imagesTs/CC0191_siemens_3_59_F.nii.gz",
+        "./imagesTs/CC0192_siemens_3_51_M.nii.gz",
+        "./imagesTs/CC0193_siemens_3_64_F.nii.gz",
+        "./imagesTs/CC0194_siemens_3_67_M.nii.gz",
+        "./imagesTs/CC0195_siemens_3_55_F.nii.gz",
+        "./imagesTs/CC0196_siemens_3_48_M.nii.gz",
+        "./imagesTs/CC0197_siemens_3_54_M.nii.gz",
+        "./imagesTs/CC0198_siemens_3_59_F.nii.gz",
+        "./imagesTs/CC0199_siemens_3_64_F.nii.gz",
+        "./imagesTs/CC0200_siemens_3_37_F.nii.gz",
+        "./imagesTs/CC0201_siemens_3_58_F.nii.gz",
+        "./imagesTs/CC0202_siemens_3_54_F.nii.gz",
+        "./imagesTs/CC0203_siemens_3_56_F.nii.gz",
+        "./imagesTs/CC0204_siemens_3_49_M.nii.gz",
+        "./imagesTs/CC0205_siemens_3_64_F.nii.gz",
+        "./imagesTs/CC0206_siemens_3_58_M.nii.gz",
+        "./imagesTs/CC0207_siemens_3_58_M.nii.gz",
+        "./imagesTs/CC0208_siemens_3_56_F.nii.gz",
+        "./imagesTs/CC0209_siemens_3_57_F.nii.gz",
+        "./imagesTs/CC0210_siemens_3_60_F.nii.gz",
+        "./imagesTs/CC0211_siemens_3_65_F.nii.gz",
+        "./imagesTs/CC0212_siemens_3_67_M.nii.gz",
+        "./imagesTs/CC0213_siemens_3_65_F.nii.gz",
+        "./imagesTs/CC0214_siemens_3_51_M.nii.gz",
+        "./imagesTs/CC0215_siemens_3_46_F.nii.gz",
+        "./imagesTs/CC0216_siemens_3_56_M.nii.gz",
+        "./imagesTs/CC0217_siemens_3_45_M.nii.gz",
+        "./imagesTs/CC0218_siemens_3_61_M.nii.gz",
+        "./imagesTs/CC0219_siemens_3_49_F.nii.gz",
+        "./imagesTs/CC0220_siemens_3_61_M.nii.gz",
+        "./imagesTs/CC0221_siemens_3_61_M.nii.gz",
+        "./imagesTs/CC0222_siemens_3_56_F.nii.gz",
+        "./imagesTs/CC0223_siemens_3_56_M.nii.gz",
+        "./imagesTs/CC0224_siemens_3_62_M.nii.gz",
+        "./imagesTs/CC0225_siemens_3_47_F.nii.gz",
+        "./imagesTs/CC0226_siemens_3_64_F.nii.gz",
+        "./imagesTs/CC0227_siemens_3_58_M.nii.gz",
+        "./imagesTs/CC0228_siemens_3_66_M.nii.gz",
+        "./imagesTs/CC0229_siemens_3_55_F.nii.gz",
+        "./imagesTs/CC0230_siemens_3_60_M.nii.gz",
+        "./imagesTs/CC0231_siemens_3_56_M.nii.gz",
+        "./imagesTs/CC0232_siemens_3_56_M.nii.gz",
+        "./imagesTs/CC0233_siemens_3_52_M.nii.gz",
+        "./imagesTs/CC0234_siemens_3_57_M.nii.gz",
+        "./imagesTs/CC0235_siemens_3_61_M.nii.gz",
+        "./imagesTs/CC0236_siemens_3_50_M.nii.gz",
+        "./imagesTs/CC0237_siemens_3_59_F.nii.gz",
+        "./imagesTs/CC0238_siemens_3_58_M.nii.gz",
+        "./imagesTs/CC0239_siemens_3_56_M.nii.gz",
+        "./imagesTs/CC0240_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0241_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0242_ge_15_55_F.nii.gz",
+        "./imagesTs/CC0243_ge_15_58_F.nii.gz",
+        "./imagesTs/CC0244_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0245_ge_15_48_M.nii.gz",
+        "./imagesTs/CC0246_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0247_ge_15_53_M.nii.gz",
+        "./imagesTs/CC0248_ge_15_51_M.nii.gz",
+        "./imagesTs/CC0249_ge_15_58_F.nii.gz",
+        "./imagesTs/CC0250_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0251_ge_15_41_M.nii.gz",
+        "./imagesTs/CC0252_ge_15_44_M.nii.gz",
+        "./imagesTs/CC0253_ge_15_58_M.nii.gz",
+        "./imagesTs/CC0254_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0255_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0256_ge_15_42_M.nii.gz",
+        "./imagesTs/CC0257_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0258_ge_15_55_F.nii.gz",
+        "./imagesTs/CC0259_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0260_ge_15_51_M.nii.gz",
+        "./imagesTs/CC0261_ge_15_59_F.nii.gz",
+        "./imagesTs/CC0262_ge_15_54_M.nii.gz",
+        "./imagesTs/CC0263_ge_15_51_M.nii.gz",
+        "./imagesTs/CC0264_ge_15_59_F.nii.gz",
+        "./imagesTs/CC0265_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0266_ge_15_57_M.nii.gz",
+        "./imagesTs/CC0267_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0268_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0269_ge_15_59_M.nii.gz",
+        "./imagesTs/CC0270_ge_15_59_M.nii.gz",
+        "./imagesTs/CC0271_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0272_ge_15_44_M.nii.gz",
+        "./imagesTs/CC0273_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0274_ge_15_47_M.nii.gz",
+        "./imagesTs/CC0275_ge_15_50_M.nii.gz",
+        "./imagesTs/CC0276_ge_15_52_M.nii.gz",
+        "./imagesTs/CC0277_ge_15_42_M.nii.gz",
+        "./imagesTs/CC0278_ge_15_61_F.nii.gz",
+        "./imagesTs/CC0279_ge_15_49_M.nii.gz",
+        "./imagesTs/CC0280_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0281_ge_15_56_M.nii.gz",
+        "./imagesTs/CC0282_ge_15_57_M.nii.gz",
+        "./imagesTs/CC0283_ge_15_44_M.nii.gz",
+        "./imagesTs/CC0284_ge_15_41_M.nii.gz",
+        "./imagesTs/CC0285_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0286_ge_15_55_F.nii.gz",
+        "./imagesTs/CC0287_ge_15_53_M.nii.gz",
+        "./imagesTs/CC0288_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0289_ge_15_59_F.nii.gz",
+        "./imagesTs/CC0290_ge_15_56_F.nii.gz",
+        "./imagesTs/CC0291_ge_15_48_M.nii.gz",
+        "./imagesTs/CC0292_ge_15_60_F.nii.gz",
+        "./imagesTs/CC0293_ge_15_50_M.nii.gz",
+        "./imagesTs/CC0294_ge_15_51_M.nii.gz",
+        "./imagesTs/CC0295_ge_15_55_M.nii.gz",
+        "./imagesTs/CC0296_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0297_ge_15_57_F.nii.gz",
+        "./imagesTs/CC0298_ge_15_58_M.nii.gz",
+        "./imagesTs/CC0299_ge_15_37_M.nii.gz",
+        "./imagesTs/CC0300_ge_3_58_M.nii.gz",
+        "./imagesTs/CC0301_ge_3_53_F.nii.gz",
+        "./imagesTs/CC0302_ge_3_56_F.nii.gz",
+        "./imagesTs/CC0303_ge_3_53_M.nii.gz",
+        "./imagesTs/CC0304_ge_3_57_F.nii.gz",
+        "./imagesTs/CC0305_ge_3_59_M.nii.gz",
+        "./imagesTs/CC0306_ge_3_52_M.nii.gz",
+        "./imagesTs/CC0307_ge_3_57_M.nii.gz",
+        "./imagesTs/CC0308_ge_3_52_F.nii.gz",
+        "./imagesTs/CC0309_ge_3_42_M.nii.gz",
+        "./imagesTs/CC0310_ge_3_51_F.nii.gz",
+        "./imagesTs/CC0311_ge_3_50_M.nii.gz",
+        "./imagesTs/CC0312_ge_3_49_M.nii.gz",
+        "./imagesTs/CC0313_ge_3_34_M.nii.gz",
+        "./imagesTs/CC0314_ge_3_54_M.nii.gz",
+        "./imagesTs/CC0315_ge_3_59_M.nii.gz",
+        "./imagesTs/CC0316_ge_3_57_M.nii.gz",
+        "./imagesTs/CC0317_ge_3_45_M.nii.gz",
+        "./imagesTs/CC0318_ge_3_52_F.nii.gz",
+        "./imagesTs/CC0319_ge_3_45_M.nii.gz",
+        "./imagesTs/CC0320_ge_3_57_F.nii.gz",
+        "./imagesTs/CC0321_ge_3_51_F.nii.gz",
+        "./imagesTs/CC0322_ge_3_59_M.nii.gz",
+        "./imagesTs/CC0323_ge_3_56_M.nii.gz",
+        "./imagesTs/CC0324_ge_3_56_M.nii.gz",
+        "./imagesTs/CC0325_ge_3_55_F.nii.gz",
+        "./imagesTs/CC0326_ge_3_55_M.nii.gz",
+        "./imagesTs/CC0327_ge_3_50_M.nii.gz",
+        "./imagesTs/CC0328_ge_3_56_F.nii.gz",
+        "./imagesTs/CC0329_ge_3_58_F.nii.gz",
+        "./imagesTs/CC0330_ge_3_57_F.nii.gz",
+        "./imagesTs/CC0331_ge_3_61_F.nii.gz",
+        "./imagesTs/CC0332_ge_3_53_F.nii.gz",
+        "./imagesTs/CC0333_ge_3_41_M.nii.gz",
+        "./imagesTs/CC0334_ge_3_45_M.nii.gz",
+        "./imagesTs/CC0335_ge_3_54_F.nii.gz",
+        "./imagesTs/CC0336_ge_3_53_F.nii.gz",
+        "./imagesTs/CC0337_ge_3_59_F.nii.gz",
+        "./imagesTs/CC0338_ge_3_51_M.nii.gz",
+        "./imagesTs/CC0339_ge_3_59_F.nii.gz",
+        "./imagesTs/CC0340_ge_3_49_M.nii.gz",
+        "./imagesTs/CC0341_ge_3_60_M.nii.gz",
+        "./imagesTs/CC0342_ge_3_50_M.nii.gz",
+        "./imagesTs/CC0343_ge_3_54_F.nii.gz",
+        "./imagesTs/CC0344_ge_3_43_M.nii.gz",
+        "./imagesTs/CC0345_ge_3_53_M.nii.gz",
+        "./imagesTs/CC0346_ge_3_43_M.nii.gz",
+        "./imagesTs/CC0347_ge_3_52_F.nii.gz",
+        "./imagesTs/CC0348_ge_3_60_F.nii.gz",
+        "./imagesTs/CC0349_ge_3_60_F.nii.gz",
+        "./imagesTs/CC0350_ge_3_62_F.nii.gz",
+        "./imagesTs/CC0351_ge_3_52_M.nii.gz",
+        "./imagesTs/CC0352_ge_3_55_F.nii.gz",
+        "./imagesTs/CC0353_ge_3_58_F.nii.gz",
+        "./imagesTs/CC0354_ge_3_61_F.nii.gz",
+        "./imagesTs/CC0355_ge_3_55_F.nii.gz",
+        "./imagesTs/CC0356_ge_3_61_F.nii.gz",
+        "./imagesTs/CC0357_ge_3_55_F.nii.gz",
+        "./imagesTs/CC0358_ge_3_52_M.nii.gz",
+        "./imagesTs/CC0359_ge_3_58_F.nii.gz"
+    ]
+}

@@ -1,0 +1,35 @@
+FROM pytorch/pytorch:latest
+
+ARG USER=unetuser
+
+RUN apt-get update && \
+    apt-get install -y sudo wget tar python3 python3-pip git nodejs
+
+ENV HOME=/home/${USER}
+WORKDIR ${HOME}
+
+RUN git clone https://github.com/MIC-DKFZ/nnUNet.git code/nnUNet
+RUN cd code/nnUNet/ && python3 -m pip  install -e .
+
+RUN python3 -m pip install --upgrade pip && python3 -m pip install \
+    # insert your requirements here
+    numpy \
+    jupyterlab \
+    matplotlib
+
+# When the container runs jupyter lab, it is served to localhost at port 8888 by default. When you want to run multiple instances of this container, or the port 8888 ist blocked, provide an alternative port as a build-arg, when building the container image.
+
+# The default 8888 is overwritten when a build-arg is provided 
+ARG NBPORT=8888
+
+# ARG is only available at build time. Hence we make it an ENV
+ENV NBPORT=$NBPORT
+
+# Make the container listen to the provided port
+EXPOSE $NBPORT
+
+ENV nnUNet_raw_data_base="${HOME}/data/nnUNet_raw"
+ENV nnUNet_preprocessed="${HOME}/data/nnUNet_preprocessed"
+ENV RESULTS_FOLDER="${HOME}/data/nnUNet_trained_models"
+
+CMD jupyter lab --port=$NBPORT --ip=0.0.0.0 --allow-root --no-browser
