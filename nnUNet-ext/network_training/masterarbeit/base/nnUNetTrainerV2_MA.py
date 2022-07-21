@@ -53,14 +53,24 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
     def initialize_test_hooks(self):
         if hasattr(self, 'hooks'):
             return
-        #register_forward_hook
-        #hook(module, input, output) -> None or modified output
-        #register_full_backward_hook
-        #hook(module, grad_input, grad_output) -> tuple(Tensor) or None
-        #hooks[name].remove()
         trainer = self
         def get_forward_hook_fn(name):
             def forward_hook_fn(module, input, output):
+                #assert (batch=1,...)
+
+                # # mean for rshift only
+                # if name == '':
+                #     trainer.slices_count += 1
+                #     return None
+                # if trainer.slices_count % 2 != 0:
+                #     return None
+                # data = trainer.activations.setdefault(name, [])
+                # data.append(
+                #     output[0].flatten(1).mean(dim=1)
+                # )
+                # return None
+
+                # full activation maps
                 if name == '':
                     trainer.slices_count += 1
                     return None
@@ -68,13 +78,8 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
                     return None
                 
                 data = trainer.activations.setdefault(name, [])
-                #assert (batch=1,...)
-                # data.append(
-                #     *output.flatten(2).mean(dim=2)
-                # )
-
                 data.append(
-                    *output.flatten(2)
+                    output[0]
                 )
                 return None
             
@@ -109,7 +114,8 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
             ps = list(module.named_parameters(recurse=False))
             if len(ps) == 0:
                 return False
-            return name in tracked_layers_set
+            return True
+            #return name in tracked_layers_set
         for name, module in self.network.named_modules():
             if not is_module_tracked(name, module):
                continue
