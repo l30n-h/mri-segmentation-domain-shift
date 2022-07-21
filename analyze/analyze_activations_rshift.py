@@ -79,7 +79,7 @@ def get_activations_dict(activations_paths, num_slices=None):
             path,
             map_location=torch.device('cpu')
         )
-
+        # TODO for each layer if not flattened and meaned than .flatten(2).mean(dim=2)
         activations_dict = get_slices_mean(
             activations_dict
         ) if num_slices is None else get_slices_subset(
@@ -120,10 +120,10 @@ def get_activations_id_path_map(directory_activations):
 def calc_rshift():
     task = 'Task601_cc359_all_training'
     trainers = [
-        'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
-        'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
-        'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
-        'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
+        'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
+        'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+        'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
+        'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
     ]
     folds = [
         'siemens15',
@@ -135,11 +135,14 @@ def calc_rshift():
     ]
     epochs = [10,20,30,40,80,120] #[40]
 
+    output_dir = 'data/csv/activations-rshift'
+    os.makedirs(output_dir, exist_ok=True)
+
     for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
         id_path_map = get_activations_id_path_map(
             os.path.join(
                 hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-                'activations'
+                'activations-mean'
             )
         )
         
@@ -155,6 +158,7 @@ def calc_rshift():
 
         scores_train = scores[scores['fold_test'] == fold_train]
         scores_train = scores_train[~scores_train['is_validation']]
+        #TODO more subsets could be used
         activation_paths_train = scores_train.nlargest(
             12,
             'sdice_score'
@@ -171,7 +175,8 @@ def calc_rshift():
             print(trainer, fold_train, fold_test, epoch)
 
             scores_test = scores[scores['fold_test'] == fold_test]
-            scores_test = scores_test.sort_values('is_validation').head(12)
+            #TODO more subsets could be used but already overlaps with train but random slices used!!
+            scores_test = scores_test.sort_values('is_validation', ascending=False).head(12)
 
             activation_paths_test = scores_test['activations_path'].tolist()
 
@@ -188,26 +193,35 @@ def calc_rshift():
             stats['epoch'] = epoch
             stats['fold_test'] = fold_test
             print(stats)
-            stats.to_csv('data/csv/activations-rshift-{}-{}-{}-{}.csv'.format(trainer, fold_train, epoch, fold_test))
+            stats.to_csv(
+                os.path.join(
+                    output_dir,
+                    'activations-rshift-{}-{}-{}-{}.csv'.format(trainer, fold_train, epoch, fold_test)
+                )
+            )
 
 
 
 def plot_rshift():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-rshift-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-rshift/activations-rshift-*.csv', recursive=False)
     ])
     stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
 
-    index = ['trainer', 'fold_train', 'epoch', 'fold_test']
-    domainshift_scores = pd.concat([
-        hlp.load_domainshift_scores(
+    index = ['trainer', 'fold_train', 'epoch']
+    scores = pd.concat([
+        hlp.get_scores(
             'Task601_cc359_all_training',
             *ids
         ) for ids in stats[index].drop_duplicates().values.tolist()
     ])
-
-    stats = stats.join(domainshift_scores.set_index(index), on=index)
-
+    index = [*index, 'fold_test']
+    scores = scores.groupby(index).agg(
+        iou_score_mean=('iou_score', 'mean'),
+        dice_score_mean=('dice_score', 'mean'),
+        sdice_score_mean=('sdice_score', 'mean'),
+    ).reset_index()
+    stats = stats.join(scores.set_index(index), on=index)
 
     layers_set = set(hlp.get_layers_ordered())
     layers_position_map = hlp.get_layers_position_map()
@@ -219,28 +233,8 @@ def plot_rshift():
     )
     stats = stats[stats['layer'].isin(layers_set)]
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
+    stats['same_fold'] = (stats['fold_train'] == stats['fold_test']).astype(int)
 
-
-
-    import random
-    random.seed(0)
-    stats['layer_pos'] = stats['layer_pos'].apply(lambda d: d + (random.random() - 0.5) * 0.7)
-
-    stats_grouped = stats.groupby([
-        'trainer_short', 'fold_train', 'epoch', 'fold_test', 'layer_pos'
-    ]).agg([
-        'mean',# 'std', 'sum', 'min', 'max'
-    ]).reset_index()
-
-    stats_grouped['psize'] = stats_grouped['epoch'] / 10
-    stats_grouped['same_fold'] = pd.factorize(
-        stats_grouped['fold_train'] == stats_grouped['fold_test'],
-        sort=True
-    )[0]
-
-    column_color = 'same_fold'
-    #column_color = ('sdice_score_other_mean', 'mean')
-    stats_grouped = stats_grouped[stats_grouped['epoch'] == 40]
 
     columns = [
         'rshift',
@@ -253,23 +247,52 @@ def plot_rshift():
         'diff_mean_abs',
         'diff_std_abs',
     ]
+
+    stats = hlp.numerate_nested(stats, [
+        'epoch',
+        'trainer_short',
+        'fold_train',
+        'same_fold',
+        'fold_test',
+    ])
+
+    stats['psize'] = stats['epoch'] / 10 + stats['same_fold'] * 5
+
+    column_color = ('sdice_score_mean')
+    
+    #stats = stats[stats['same_fold'] == 0]
+    stats = stats[stats['epoch'] >= 40]
+    #stats = stats[stats['epoch'] == 40]
+
+    output_dir = 'data/fig/activations-rshift'
+    os.makedirs(output_dir, exist_ok=True)
+
     for column in columns:
-        fig, axes = hlp.create_scatter_plot(
-            stats_grouped,
-            column_x='layer_pos',
-            column_y=(column, 'mean'),
-            column_subplots='trainer_short',
+        print(column)
+        fig, axes = hlp.create_plot(
+            stats,
+            column_x='x',
+            column_y=column,
+            column_subplots='layer_pos',
             column_size='psize',
             column_color=column_color,
-            ncols=1,
-            figsize=(32, 24),
-            lim_same_x=True,
-            lim_same_y=True,
+            ncols=2,
+            figsize=(42, 24*4),
+            lim_same_x=False,
+            lim_same_y=False,
             lim_same_c=True,
-            colormap='cool'
+            colormap='cool',
+            fig_num='activations_rshift',
+            fig_clear=True
         )
-
-        fig.savefig('data/fig/activations-{}.png'.format(column))
+        fig.savefig(
+            os.path.join(
+                output_dir,
+                'activations-rshift-{}.png'.format(column)
+            ),
+            bbox_inches='tight',
+            pad_inches=0
+        )
         plt.close(fig)
 
 

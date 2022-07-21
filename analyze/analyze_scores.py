@@ -36,7 +36,7 @@ columns = [
     'sdice_score'
 ]
 for column in columns:
-    fig, axes = hlp.create_scatter_plot(
+    fig, axes = hlp.create_plot(
         scores,
         column_x='id',
         column_y=column,
