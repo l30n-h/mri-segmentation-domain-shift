@@ -9,14 +9,23 @@ from nnunet.training.loss_functions.deep_supervision import MultipleOutputLoss2
 from nnunet.training.network_training.nnUNetTrainerV2 import nnUNetTrainerV2
 from torch import nn
 
+def reduce_batchsize_to_4(activations):
+    #TODO heuristic to choose 4 slices that are mostly centered
+    start = 1 if activations.shape[0] > 4 else 0
+    step = activations.shape[0] // 4
+    return activations[start::step].clone()
+
 def save_activations(activations, output_filename):
     activations = dict(map(
         lambda item: (
             item[0],
-            torch.stack(item[1])
+            reduce_batchsize_to_4(
+                torch.stack(item[1])
+            )
         ),
         activations.items()
     ))
+
 
     output_dir = os.path.join(
         os.path.dirname(output_filename),

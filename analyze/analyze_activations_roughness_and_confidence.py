@@ -122,20 +122,14 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
     def get_activations_dicts_merged(activations_paths):
         activations_dict_concat = dict()
         for path in activations_paths:
-            for folder_suffix in ['-encoder', '-decoder']:
-                activations_dict = torch.load(
-                    path.replace('-encoder', folder_suffix),
-                    map_location=torch.device('cpu')
+            activations_dict = torch.load(
+                path,
+                map_location=torch.device('cpu')
+            )
+            for key, value in activations_dict.items():
+                activations_dict_concat.setdefault(key, []).extend(
+                    value
                 )
-                for key, value in activations_dict.items():
-                    start = 1 if value.shape[0] > 4 else 0
-                    step = value.shape[0] // 4
-                    #TODO works only for length of 4 8 12
-                    value = value[start::step]
-
-                    activations_dict_concat.setdefault(key, []).extend(
-                        value
-                    )
         
         return dict(map(
             lambda item: (
@@ -202,7 +196,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
                 stride=stride
             )
 
-            PCA_components = 10
+            PCA_components = 0.8 #10
             kmeans_components = 5
 
             pca_src, kmeans_src, mixtures_src = learn_manifold(
@@ -289,7 +283,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             lambda p: (hlp.get_id_from_filename(os.path.basename(p)), p),
             glob.iglob(os.path.join(
                 hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-                'activations-small-encoder',
+                'activations-small-fullmap',
                 '*_activations.pkl'
             ))
         ))
@@ -310,7 +304,8 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
         stats.to_csv(
             os.path.join(
                 output_dir,
-                'activations-roughness-and-confidence-grouped-relu-and-residual-{}-{}-{}.csv'.format(
+                'activations-roughness-and-confidence-grouped-relu-and-residual{}-{}-{}-{}.csv'.format(
+                    '-pca80p',#'',
                     trainer,
                     fold_train,
                     epoch
@@ -321,7 +316,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
 
 def plot_roughness_and_confidence_grouped():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca80p-*.csv', recursive=False)
     ])
     stats.rename(
         columns={
@@ -335,14 +330,14 @@ def plot_roughness_and_confidence_grouped():
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
 
     stats_weights = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/weights-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
     ])
     stats_weights['name'] = stats_weights['name'].str.replace('.weight', '')
     stats_weights = stats_weights[['trainer', 'fold_train', 'epoch', 'name', 'norm_frob', 'norm_spectral']]
 
     # TODO
-    #stats = stats[~stats['layer'].str.startswith('seg_outputs')]
-    #stats = stats[~stats['layer'].str.startswith('tu')]
+    stats = stats[~stats['layer'].str.startswith('seg_outputs')]
+    stats = stats[~stats['layer'].str.startswith('tu')]
     stats['layer'] = stats['layer'].str.replace('.instnorm', '.conv')
     # 
     stats = stats.join(stats_weights.set_index(['trainer', 'fold_train', 'epoch', 'name']), on=['trainer', 'fold_train', 'epoch', 'layer'])
@@ -385,6 +380,8 @@ def plot_roughness_and_confidence_grouped():
         roughness_spectral_mean=('roughness_spectral', 'mean'),
         confidence_spectral_mean=('confidence_spectral', 'mean'),
         confidence_weighted_spectral_mean=('confidence_weighted_spectral', 'mean'),
+        pca_src_variance_ratio_cumsum_index_max_mean=('pca_src_variance_ratio_cumsum_index_max', 'mean'),
+        pca_dst_variance_ratio_cumsum_index_max_mean=('pca_dst_variance_ratio_cumsum_index_max', 'mean'),
     ).reset_index()
     stats_meaned['subplot'] = stats_meaned['trainer_short'] + '_' + stats_meaned['fold_train']
     stats_meaned['psize'] = stats_meaned['epoch'] / 10 + (stats_meaned['fold_train'] == stats_meaned['fold_test']).astype(int) * 5
@@ -427,7 +424,9 @@ def plot_roughness_and_confidence_grouped():
         'confidence_weighted_frob',
         'roughness_spectral',
         'confidence_spectral',
-        'confidence_weighted_spectral'
+        'confidence_weighted_spectral',
+        'pca_src_variance_ratio_cumsum_index_max',
+        'pca_dst_variance_ratio_cumsum_index_max'
     ]:
         print(column)
         fig, axes = hlp.create_plot(
@@ -489,7 +488,7 @@ def plot_roughness_and_confidence_grouped():
         )
         plt.close(fig)
     
-    for column in ['variance_ratio_cumsum_m', 'noise_variance', 'inertia', 'n_iter', 'norm']:
+    for column in ['variance_ratio_cumsum_m', 'noise_variance', 'inertia', 'n_iter', 'norm', 'index_max']:
         fig, axes = hlp.create_plot(
             stats_train,
             column_x='layer_pos',
@@ -541,7 +540,7 @@ folds = [
     # 'philips15',
     # 'philips3'
 ]
-epochs = [40, 120] #[10,20,30,40,80,120]
+epochs = [10,20,30,40,80,120]
 
 
 #calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
@@ -554,4 +553,9 @@ plot_roughness_and_confidence_grouped()
 #     here 12 (scans per fold) * 4 (slices) => 48 testing exams
 #TODO paper uses mask in test data to sample well distributed samples. Still label free??
 #TODO which layers to consider?
+#     model 600 referenced in paper seems to define a layer as conv-norm-relu...
 #     here only .conv .tu .seg_outputs
+#TODO number of pca components needed for 80% variance seems to correlate with epochs and optimizer
+#     at least its lower for adam than for sgd
+#     its lower for 120 epochs for SGD and higher for 120 epochs for Adam
+#     its slightly lower for both if DA is used (execept sgd ge3)

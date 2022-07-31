@@ -83,13 +83,16 @@ def calc_noise_stats(task, trainers, folds, epochs):
         stats['id'] = file_id
         return stats
     
-    folder_suffixes = ['-encoder', '-decoder']
-    for trainer, fold_train, epoch, folder_suffix in itertools.product(trainers, folds, epochs, folder_suffixes):
-        print(task, trainer, fold_train, epoch, folder_suffix)
+
+    output_dir = 'data/csv/activations-noise'
+    os.makedirs(output_dir, exist_ok=True)
+
+    for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
+        print(task, trainer, fold_train, epoch)
 
         directory_activations = os.path.join(
             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-            'activations-small{}'.format(folder_suffix)
+            'activations-small-fullmap'
         )
 
         id_path_map = dict(map(
@@ -104,12 +107,16 @@ def calc_noise_stats(task, trainers, folds, epochs):
         ])
 
         stats = stats.join(scores.set_index('id'), on='id')
-        stats.to_csv('data/csv/activations-noise{}-{}-{}-{}.csv'.format(
-            folder_suffix,
-            trainer,
-            fold_train,
-            epoch
-        ))
+        stats.to_csv(
+            os.path.join(
+                output_dir,
+                'activations-noise-{}-{}-{}.csv'.format(
+                    trainer,
+                    fold_train,
+                    epoch
+                )
+            )
+        )
 
 
 def plot_activation_maps_as_image(scores, id_path_map, layer_name, out_path):
@@ -169,7 +176,7 @@ def plot_activation_maps(task, trainers, folds, epochs):
 
         directory_activations = os.path.join(
             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-            'activations-small-decoder'
+            'activations-small-fullmap'
         )
 
         scores = hlp.get_scores(task, trainer, fold_train, epoch)
@@ -190,7 +197,7 @@ def plot_activation_maps(task, trainers, folds, epochs):
 
 def plot_noise():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-noise-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-noise/activations-noise-*.csv', recursive=False)
     ])
     stats.rename(
         columns={
@@ -264,7 +271,7 @@ def plot_noise():
 
 def plot_noise_layerwise():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-noise-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-noise/activations-noise-*.csv', recursive=False)
     ])
     stats.rename(
         columns={

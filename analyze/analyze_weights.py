@@ -150,6 +150,9 @@ def calc_weight_norms(network):
     return stats_norms
 
 def calc_weight_stats(folder_train, trainers, folds, epochs):
+    output_dir = 'data/csv/weights'
+    os.makedirs(output_dir, exist_ok=True)
+
     for trainer, fold, epoch in itertools.product(trainers, folds, epochs):
         print(trainer, fold, epoch)
 
@@ -181,11 +184,16 @@ def calc_weight_stats(folder_train, trainers, folds, epochs):
         stats['trainer'] = trainer
         stats['fold_train'] = fold
         stats['epoch'] = epoch
-        stats.reset_index().to_csv('data/csv/weights-{}-{}-{}.csv'.format(trainer, fold, epoch))
+        stats.reset_index().to_csv(
+            os.path.join(
+                output_dir,
+                'weights-{}-{}-{}.csv'.format(trainer, fold, epoch)
+            )
+        )
 
 def plot_weight_stats():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/weights-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
     ])
     stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
 
@@ -420,6 +428,5 @@ def load_parameters(trainer, fold, epoch):
 
 #calc_weight_stats(folder_train, trainers, folds, epochs)
 
-plot_weight_stats()
-
+#plot_weight_stats()
 #plot_weights(trainers, folds, epochs, load_parameters)

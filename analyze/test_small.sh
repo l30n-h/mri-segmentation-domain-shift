@@ -16,12 +16,11 @@ fold_id_mapping['ge3']=3
 # fold_id_mapping['philips15']=4
 # fold_id_mapping['philips3']=5
 
-#epochs=('010' '020' '030' '040' '080' '120')
-epochs=('040' '120')
+epochs=('010' '020' '030' '040' '080' '120')
 
 #testset_suffix=''
 testset_suffix='-small'
-activations_suffix="${testset_suffix}-small"
+activations_suffix="${testset_suffix}-fullmap"
 
 export MA_USE_TEST_HOOKS=TRUE
 

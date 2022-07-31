@@ -11,14 +11,6 @@ import helpers as hlp
 
 def generate_stats_activation_maps(activations_dict):
     for name, activation_maps in activations_dict.items():
-        start = 1 if activation_maps.shape[0] > 4 else 0
-        step = activation_maps.shape[0] // 4
-        #TODO works only for length of 4 8 12
-        activation_maps = activation_maps[start::step]
-
-        #TODO single slice?? mean over slices??
-        slice_id = 0
-
         activation_maps = activation_maps.to(device='cuda').to(dtype=torch.float32)
 
         maps_flat = activation_maps.flatten(2)
@@ -74,13 +66,16 @@ def calc_diversity_stats(task, trainers, folds, epochs):
         stats['id'] = file_id
         return stats
     
-    folder_suffixes = ['-encoder', '-decoder']
-    for trainer, fold_train, epoch, folder_suffix in itertools.product(trainers, folds, epochs, folder_suffixes):
-        print(task, trainer, fold_train, epoch, folder_suffix)
+
+    output_dir = 'data/csv/activations-diversity'
+    os.makedirs(output_dir, exist_ok=True)
+
+    for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
+        print(task, trainer, fold_train, epoch)
 
         directory_activations = os.path.join(
             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-            'activations-small{}'.format(folder_suffix)
+            'activations-small-fullmap'
         )
 
         id_path_map = dict(map(
@@ -95,7 +90,12 @@ def calc_diversity_stats(task, trainers, folds, epochs):
         ])
 
         stats = stats.join(scores.set_index('id'), on='id')
-        stats.to_csv('data/csv/activations-diversity{}-{}-{}-{}.csv'.format(folder_suffix, trainer, fold_train, epoch))
+        stats.to_csv(
+            os.path.join(
+                output_dir,
+                'activations-diversity-{}-{}-{}.csv'.format(trainer, fold_train, epoch)
+            )
+        )
 
 
 def print_scores():
@@ -122,13 +122,12 @@ def print_scores():
 
 def plot_activations():
     layers_position_map = hlp.get_layers_position_map()
-    folder_suffixes = ['-encoder', '-decoder']
-    for trainer, fold_train, epoch, folder_suffix in itertools.product(trainers, folds, epochs, folder_suffixes):
-        print(task, trainer, fold_train, epoch, folder_suffix)
+    for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
+        print(task, trainer, fold_train, epoch)
 
         directory_activations = os.path.join(
             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-            'activations-small{}'.format(folder_suffix)
+            'activations-small-fullmap'
         )
 
         id_path_map = dict(map(
@@ -159,11 +158,6 @@ def plot_activations():
             for name, activation_maps in activations_dict.items():
                 layer_id = layers_position_map.get(name)
                 activation_maps = activation_maps.to(dtype=torch.float32)
-
-                start = 1 if activation_maps.shape[0] > 4 else 0
-                step = activation_maps.shape[0] // 4
-                #TODO works only for length of 4 8 12
-                activation_maps = activation_maps[start::step]
 
                 #activation_maps = activation_maps
                 #activation_maps = activation_maps / activation_maps.abs().flatten(2).max(dim=2)[0][:,:,None, None]
@@ -202,13 +196,12 @@ def plot_activations():
 
 def plot_activations_moments():
     layers_position_map = hlp.get_layers_position_map()
-    folder_suffixes = ['-encoder', '-decoder']
-    for trainer, fold_train, epoch, folder_suffix in itertools.product(trainers, folds, epochs, folder_suffixes):
-        print(task, trainer, fold_train, epoch, folder_suffix)
+    for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
+        print(task, trainer, fold_train, epoch)
 
         directory_activations = os.path.join(
             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-            'activations-small{}'.format(folder_suffix)
+            'activations-small-fullmap'
         )
 
         id_path_map = dict(map(
@@ -283,13 +276,12 @@ def plot_activations_moments():
 
 def plot_activations_moments_combined():
     layers_position_map = hlp.get_layers_position_map()
-    folder_suffixes = ['-encoder', '-decoder']
-    for trainer, fold_train, epoch, folder_suffix in itertools.product(trainers, folds, epochs, folder_suffixes):
-        print(task, trainer, fold_train, epoch, folder_suffix)
+    for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
+        print(task, trainer, fold_train, epoch)
 
         directory_activations = os.path.join(
             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-            'activations-small{}'.format(folder_suffix)
+            'activations-small-fullmap'
         )
 
         id_path_map = dict(map(
@@ -323,11 +315,8 @@ def plot_activations_moments_combined():
                 map_location=torch.device('cpu')
             )
             for name, activation_maps in activations_dict.items():
-                start = 1 if activation_maps.shape[0] > 4 else 0
-                step = activation_maps.shape[0] // 4
-                #TODO works only for length of 4 8 12
                 activations_dict_merged.setdefault(name, []).append(
-                    activation_maps[start::step]
+                    activation_maps
                 )
             
         for name, activation_maps in activations_dict_merged.items():
@@ -380,7 +369,7 @@ def plot_activations_moments_combined():
 
 def plot_diversity():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-diversity-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-diversity/activations-diversity-*.csv', recursive=False)
     ])
     stats.rename(
         columns={
