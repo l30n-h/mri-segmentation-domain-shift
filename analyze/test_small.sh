@@ -39,7 +39,8 @@ do
         folder_name="${trainer}-ep${epoch}-${fold_name}"
         testout_dir="data/testout/${folder_name}"
         mkdir ${testout_dir}
-        python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_simple.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -i data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training/imagesTs${testset_suffix}/ -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
+        #python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_simple.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -i data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training/imagesTs${testset_suffix}/ -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
+        python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_preprocessed.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -k code/analyze/ids_small.json -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
         mv ${testout_dir}/activations archive/old/nnUNet-container/data/testout/Task601_cc359_all_training/${folder_name}/activations${activations_suffix}
       } &
     done

@@ -16,17 +16,6 @@ def reduce_batchsize_to_4(activations):
     return activations[start::step].clone()
 
 def save_activations(activations, output_filename):
-    activations = dict(map(
-        lambda item: (
-            item[0],
-            reduce_batchsize_to_4(
-                torch.stack(item[1])
-            )
-        ),
-        activations.items()
-    ))
-
-
     output_dir = os.path.join(
         os.path.dirname(output_filename),
         'activations'
@@ -52,8 +41,15 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
         self.slices_count = 0
 
     def post_predict(self):
-        #print(list(self.activations.keys()))
-        pass
+        self.activations = dict(map(
+            lambda item: (
+                item[0],
+                reduce_batchsize_to_4(
+                    torch.stack(item[1])
+                ).cpu()
+            ),
+            self.activations.items()
+        ))
 
     def get_async_save_predict_and_args(self, output_filename):
         activations = self.activations
