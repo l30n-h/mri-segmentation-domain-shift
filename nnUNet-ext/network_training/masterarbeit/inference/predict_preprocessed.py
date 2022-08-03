@@ -6,7 +6,7 @@ import shutil
 from time import sleep
 import json
 
-from batchgenerators.utilities.file_and_folder_operations import join, isdir, isfile, maybe_mkdir_p, save_json, load_pickle
+from batchgenerators.utilities.file_and_folder_operations import join, isdir, isfile, maybe_mkdir_p, save_json, load_pickle, subfiles
 from nnunet.evaluation.evaluator import aggregate_scores
 from nnunet.inference.segmentation_export import save_segmentation_nifti_from_softmax
 from nnunet.paths import default_plans_identifier, network_training_output_dir, default_cascade_trainer, default_trainer
@@ -30,7 +30,8 @@ def predict_preprocessed(
     all_in_gpu: bool = False,
     segmentation_export_kwargs: dict = None,
     run_postprocessing_on_folds: bool = True,
-    num_threads: int = 8
+    num_threads: int = 8,
+    save_original_gt: bool = False,
 ):
     """
     if debug=True then the temporary files generated for postprocessing determination will be kept
@@ -103,8 +104,11 @@ def predict_preprocessed(
             if hasattr(trainer, 'pre_predict'):
                 trainer.pre_predict()
 
+            if not (hasattr(trainer, 'test_include_gt') and trainer.test_include_gt):
+                data = data[:-1]
+
             softmax_pred = trainer.predict_preprocessed_data_return_seg_and_softmax(
-                data[:-1],
+                data,
                 do_mirroring=do_mirroring,
                 mirror_axes=mirror_axes,
                 use_sliding_window=use_sliding_window,
@@ -194,27 +198,28 @@ def predict_preprocessed(
         # after this the final predictions for the vlaidation set can be found in folder_name_prediction_base + "_postprocessed"
         # They are always in that folder, even if no postprocessing as applied!
 
-    # detemining postprocesing on a per-fold basis may be OK for this fold but what if another fold finds another
-    # postprocesing to be better? In this case we need to consolidate. At the time the consolidation is going to be
-    # done we won't know what trainer.gt_niftis_folder was, so now we copy all the niftis into a separate folder to
-    # be used later
-    gt_nifti_folder = join(trainer.output_folder_base, "gt_niftis")
-    maybe_mkdir_p(gt_nifti_folder)
-    for f in subfiles(trainer.gt_niftis_folder, suffix=".nii.gz"):
-        success = False
-        attempts = 0
-        e = None
-        while not success and attempts < 10:
-            try:
-                shutil.copy(f, gt_nifti_folder)
-                success = True
-            except OSError as e:
-                attempts += 1
-                sleep(1)
-        if not success:
-            print("Could not copy gt nifti file %s into folder %s" % (f, gt_nifti_folder))
-            if e is not None:
-                raise e
+    if save_original_gt:
+        # detemining postprocesing on a per-fold basis may be OK for this fold but what if another fold finds another
+        # postprocesing to be better? In this case we need to consolidate. At the time the consolidation is going to be
+        # done we won't know what trainer.gt_niftis_folder was, so now we copy all the niftis into a separate folder to
+        # be used later
+        gt_nifti_folder = join(trainer.output_folder_base, "gt_niftis")
+        maybe_mkdir_p(gt_nifti_folder)
+        for f in subfiles(trainer.gt_niftis_folder, suffix=".nii.gz"):
+            success = False
+            attempts = 0
+            e = None
+            while not success and attempts < 10:
+                try:
+                    shutil.copy(f, gt_nifti_folder)
+                    success = True
+                except OSError as e:
+                    attempts += 1
+                    sleep(1)
+            if not success:
+                print("Could not copy gt nifti file %s into folder %s" % (f, gt_nifti_folder))
+                if e is not None:
+                    raise e
 
     trainer.network.train(current_mode)
 
@@ -369,7 +374,8 @@ def main():
         all_in_gpu=all_in_gpu,
         segmentation_export_kwargs=None,
         run_postprocessing_on_folds=False,
-        num_threads=num_threads_nifti_save
+        num_threads=num_threads_nifti_save,
+        save_original_gt=False
     )
 
 

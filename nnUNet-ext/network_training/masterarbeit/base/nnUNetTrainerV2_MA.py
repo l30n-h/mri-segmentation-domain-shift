@@ -10,7 +10,7 @@ from nnunet.training.network_training.nnUNetTrainerV2 import nnUNetTrainerV2
 from torch import nn
 
 def reduce_batchsize_to_4(activations):
-    #TODO heuristic to choose 4 slices that are mostly centered
+    #TODO heuristic to choose 4 slices/tiles that are mostly centered
     start = 1 if activations.shape[0] > 4 else 0
     step = activations.shape[0] // 4
     return activations[start::step].clone()
@@ -27,6 +27,56 @@ def save_activations(activations, output_filename):
         os.path.join(output_dir, filename + "_activations.pkl")
     )
 
+def get_forward_pre_hook_fn(trainer, name):
+    def forward_pre_hook_fn(module, input):
+        if name == '':
+            trainer.slices_and_tiles_count += 1
+            
+            if trainer.slices_and_tiles_count % trainer.keep_every == 0:
+                data = trainer.activations.setdefault('input', [])
+                data.append(
+                    input[0][0,:-1,:,:]
+                )
+                if trainer.test_include_gt:
+                    data = trainer.activations.setdefault('gt', [])
+                    data.append(
+                        input[0][0,-1:,:,:]
+                    )
+            
+            if trainer.test_include_gt:
+                return tuple(map(lambda i: i[:,:-1,:,:], input))
+            return None
+        
+        return None
+        
+
+    return forward_pre_hook_fn
+
+def get_forward_hook_fn(trainer, name):
+    def forward_hook_fn(module, input, output):
+        #assert (batch=1,...)
+
+        # # mean for rshift only
+        # if trainer.slices_and_tiles_count % trainer.keep_every != 0:
+        #     return None
+        # data = trainer.activations.setdefault(name, [])
+        # data.append(
+        #     output[0].flatten(1).mean(dim=1)
+        # )
+        # return None
+
+        # full activation maps
+        if trainer.slices_and_tiles_count % trainer.keep_every != 0:
+            return None
+        
+        data = trainer.activations.setdefault(name, [])
+        data.append(
+            output[0]
+        )
+        return None
+    
+    return forward_hook_fn
+
 class nnUNetTrainerV2_MA(nnUNetTrainerV2):
 
     def __init__(self, plans_file, fold, output_folder=None, dataset_directory=None, batch_dice=True, stage=None,
@@ -35,10 +85,12 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
                          deterministic, fp16)
         self.deep_supervision = True
         self.use_test_hooks = os.getenv('MA_USE_TEST_HOOKS', 'FALSE').lower() == 'true'
+        self.test_include_gt = os.getenv('MA_TEST_INCLUDE_GT', 'FALSE').lower() == 'true'
 
     def pre_predict(self):
         self.activations = {}
-        self.slices_count = 0
+        self.slices_and_tiles_count = -1
+        self.keep_every = 64
 
     def post_predict(self):
         self.activations = dict(map(
@@ -58,75 +110,24 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
     def initialize_test_hooks(self):
         if hasattr(self, 'hooks'):
             return
-        trainer = self
-        def get_forward_hook_fn(name):
-            def forward_hook_fn(module, input, output):
-                #assert (batch=1,...)
-
-                # # mean for rshift only
-                # if name == '':
-                #     trainer.slices_count += 1
-                #     return None
-                # if trainer.slices_count % 2 != 0:
-                #     return None
-                # data = trainer.activations.setdefault(name, [])
-                # data.append(
-                #     output[0].flatten(1).mean(dim=1)
-                # )
-                # return None
-
-                # full activation maps
-                if name == '':
-                    trainer.slices_count += 1
-                    return None
-                if trainer.slices_count % 64 != 0:
-                    return None
-                
-                data = trainer.activations.setdefault(name, [])
-                data.append(
-                    output[0]
-                )
-                return None
-            
-            return forward_hook_fn
-
+        
         self.hooks = {}
-        tracked_layers_set = set([
-            'conv_blocks_context.0.blocks.0.conv',
-            'conv_blocks_context.0.blocks.0.instnorm',
-            'conv_blocks_context.0.blocks.1.conv',
-            'conv_blocks_context.0.blocks.1.instnorm',
-            'conv_blocks_context.1.blocks.0.conv',
-            'conv_blocks_context.1.blocks.0.instnorm',
-            'conv_blocks_context.1.blocks.1.conv',
-            'conv_blocks_context.1.blocks.1.instnorm',
-            'conv_blocks_context.2.blocks.0.conv',
-            'conv_blocks_context.2.blocks.0.instnorm',
-            'conv_blocks_context.2.blocks.1.conv',
-            'conv_blocks_context.2.blocks.1.instnorm',
-            'conv_blocks_context.3.blocks.0.conv',
-            'conv_blocks_context.3.blocks.0.instnorm',
-            'conv_blocks_context.3.blocks.1.conv',
-            'conv_blocks_context.3.blocks.1.instnorm',
-            'conv_blocks_context.4.0.blocks.0.conv',
-            'conv_blocks_context.4.0.blocks.0.instnorm',
-            'conv_blocks_context.4.1.blocks.0.conv',
-            'conv_blocks_context.4.1.blocks.0.instnorm',
-        ])
         def is_module_tracked(name, module):
-            if name == '':
-                return True
             ps = list(module.named_parameters(recurse=False))
             if len(ps) == 0:
                 return False
             return True
-            #return name in tracked_layers_set
+
+        trainer = self
         for name, module in self.network.named_modules():
-            if not is_module_tracked(name, module):
-               continue
-            self.hooks[name] = module.register_forward_hook(
-                get_forward_hook_fn(name)
-            )
+            if name == '':
+                self.hooks['forward_pre_' + name] = module.register_forward_pre_hook(
+                    get_forward_pre_hook_fn(trainer, name)
+                )
+            if is_module_tracked(name, module):
+                self.hooks['forward_' + name] = module.register_forward_hook(
+                    get_forward_hook_fn(trainer, name)
+                )
 
     def wrap__loss_for_deep_supervision(self):
         # we need to know the number of outputs of the network
