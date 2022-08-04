@@ -154,7 +154,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
                 scores['activations_path'].tolist()
             ) for key, scores in scores_dict.items()
         }
-        layers = list(filter(
+        layers = ['input'] + list(filter(
             lambda x: '.instnorm' in x or 'tu.' in x or 'seg_outputs.' in x,
             hlp.get_layers_ordered()
         ))
@@ -167,30 +167,38 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             layer_config = hlp.get_layer_config(layer_cur)
             if 'kernel_size' not in layer_config:
                 continue
+            data_gt = activations_dict_train['gt']
+
+            #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
+            #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
+            data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
+            data_dst_gt = torch.nn.functional.interpolate(data_gt, data_dst.shape[2:], mode='bilinear').ceil()
             
             kernel_size=layer_config['kernel_size']
             stride=layer_config['stride']
             MAX_SAMPLES=6*4*255*195 // 40 # paper code batchsize 50 * volsize [64,64,16] / 80000
 
             print(layer_cur)
-            data_src = data_src.movedim(1, -1).numpy()
 
             if '.instnorm' in layer_pre:
-                data_src = np.where(data_src > 0, data_src, data_src * 0.01)
+                data_src = torch.where(data_src > 0, data_src, data_src * 0.01)
             if layer_pre.startswith('tu.'):
                 d = int(layer_pre.replace('tu.', ''))
-                conv_blocks_context = activations_dict_train['conv_blocks_context.{}.blocks.1.instnorm'.format(3-d)].movedim(1, -1).numpy()
-                conv_blocks_context = np.where(conv_blocks_context > 0, conv_blocks_context, conv_blocks_context * 0.01)
-                data_src = np.concatenate((data_src, conv_blocks_context), axis=-1)
+                conv_blocks_context = activations_dict_train['conv_blocks_context.{}.blocks.1.instnorm'.format(3-d)]
+                conv_blocks_context = torch.where(conv_blocks_context > 0, conv_blocks_context, conv_blocks_context * 0.01)
+                data_src = torch.cat((data_src, conv_blocks_context), axis=1)
             
+
+            data_src = data_src.movedim(1, -1).numpy()
+            data_src_gt = data_src_gt.movedim(1, -1).numpy()
             data_dst = data_dst.movedim(1, -1).numpy()
-            
-            #print(data.shape)
+            data_dst_gt = data_dst_gt.movedim(1, -1).numpy()
+
             pt_src, pt_src_gt, pt_dst_pred, pt_dst_gt = align_and_subsample(
                 data_src,
-                np.zeros_like(data_src),
+                data_src_gt,
                 data_dst,
-                np.zeros_like(data_dst),
+                data_dst_gt,
                 MAX_SAMPLES=MAX_SAMPLES,
                 kernel_size=kernel_size,
                 stride=stride
@@ -222,22 +230,34 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             }
 
             for (fold_test, is_validation), activations_dict in activations_dict_dict.items():
-                data_src = activations_dict[layer_pre].movedim(1, -1).numpy()
-                
+                data_src = activations_dict[layer_pre]
+                data_dst = activations_dict[layer_cur]
+                data_gt = activations_dict['gt']
+
+                #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
+                #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
+                data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
+                data_dst_gt = torch.nn.functional.interpolate(data_gt, data_dst.shape[2:], mode='bilinear').ceil()
+
                 if '.instnorm' in layer_pre:
-                    data_src = np.where(data_src > 0, data_src, data_src * 0.01)
+                    data_src = torch.where(data_src > 0, data_src, data_src * 0.01)
                 if layer_pre.startswith('tu.'):
                     d = int(layer_pre.replace('tu.', ''))
-                    conv_blocks_context = activations_dict['conv_blocks_context.{}.blocks.1.instnorm'.format(3-d)].movedim(1, -1).numpy()
-                    conv_blocks_context = np.where(conv_blocks_context > 0, conv_blocks_context, conv_blocks_context * 0.01)
-                    data_src = np.concatenate((data_src, conv_blocks_context), axis=-1)
+                    conv_blocks_context = activations_dict['conv_blocks_context.{}.blocks.1.instnorm'.format(3-d)]
+                    conv_blocks_context = torch.where(conv_blocks_context > 0, conv_blocks_context, conv_blocks_context * 0.01)
+                    data_src = torch.cat((data_src, conv_blocks_context), axis=1)
                 
-                data_dst = activations_dict[layer_cur].movedim(1, -1).numpy()
+                
+                data_src = data_src.movedim(1, -1).numpy()
+                data_src_gt = data_src_gt.movedim(1, -1).numpy()
+                data_dst = data_dst.movedim(1, -1).numpy()
+                data_dst_gt = data_dst_gt.movedim(1, -1).numpy()
+
                 test_src, test_src_gt, test_dst_pred, test_dst_gt = align_and_subsample(
                     data_src,
-                    np.zeros_like(data_src),
+                    data_src_gt,
                     data_dst,
-                    np.zeros_like(data_dst),
+                    data_dst_gt,
                     MAX_SAMPLES=MAX_SAMPLES*2,
                     kernel_size=kernel_size,
                     stride=stride
@@ -305,7 +325,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             os.path.join(
                 output_dir,
                 'activations-roughness-and-confidence-grouped-relu-and-residual{}-{}-{}-{}.csv'.format(
-                    '-pca80p',#'',
+                    '-pca80p-gt',#'',
                     trainer,
                     fold_train,
                     epoch
@@ -316,7 +336,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
 
 def plot_roughness_and_confidence_grouped():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca80p-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca80p-gt-*.csv', recursive=False)
     ])
     stats.rename(
         columns={
@@ -559,3 +579,5 @@ plot_roughness_and_confidence_grouped()
 #     at least its lower for adam than for sgd
 #     its lower for 120 epochs for SGD and higher for 120 epochs for Adam
 #     its slightly lower for both if DA is used (execept sgd ge3)
+
+#TODO check for seg_output shift
