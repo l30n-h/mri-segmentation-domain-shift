@@ -154,40 +154,27 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
                 scores['activations_path'].tolist()
             ) for key, scores in scores_dict.items()
         }
-        layers = ['input'] + list(filter(
-            lambda x: '.instnorm' in x or 'tu.' in x or 'seg_outputs.' in x,
+        layers = list(filter(
+            lambda x: '.instnorm' in x or 'tu.' in x or 'seg_outputs.3' in x,
             hlp.get_layers_ordered()
         ))
-        for layer_pre, layer_cur in zip(layers, layers[1:]):
+        for layer_cur in layers:
             activations_dict_train = activations_dict_dict[(fold_train, 0)]
-            data_src = activations_dict_train.get(layer_pre, None)
-            data_dst = activations_dict_train.get(layer_cur, None)
-            if data_src is None or data_dst is None:
-                continue
-            layer_config = hlp.get_layer_config(layer_cur)
-            if 'kernel_size' not in layer_config:
-                continue
+            data_src = hlp.get_activations_input(layer_cur.replace('.instnorm', '.conv'), activations_dict_train)
+            data_dst = hlp.get_activations_output(layer_cur, activations_dict_train)
             data_gt = activations_dict_train['gt']
-
             #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
             #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
             data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
             data_dst_gt = torch.nn.functional.interpolate(data_gt, data_dst.shape[2:], mode='bilinear').ceil()
+
+            layer_config = hlp.get_layer_config(layer_cur)
             
             kernel_size=layer_config['kernel_size']
             stride=layer_config['stride']
-            MAX_SAMPLES=6*4*255*195 // 40 # paper code batchsize 50 * volsize [64,64,16] / 80000
+            MAX_SAMPLES=6*4*255*195 // 37 # paper code batchsize 45 * volsize [64,64,16] / 80000
 
             print(layer_cur)
-
-            if '.instnorm' in layer_pre:
-                data_src = torch.where(data_src > 0, data_src, data_src * 0.01)
-            if layer_pre.startswith('tu.'):
-                d = int(layer_pre.replace('tu.', ''))
-                conv_blocks_context = activations_dict_train['conv_blocks_context.{}.blocks.1.instnorm'.format(3-d)]
-                conv_blocks_context = torch.where(conv_blocks_context > 0, conv_blocks_context, conv_blocks_context * 0.01)
-                data_src = torch.cat((data_src, conv_blocks_context), axis=1)
-            
 
             data_src = data_src.movedim(1, -1).numpy()
             data_src_gt = data_src_gt.movedim(1, -1).numpy()
@@ -230,23 +217,14 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             }
 
             for (fold_test, is_validation), activations_dict in activations_dict_dict.items():
-                data_src = activations_dict[layer_pre]
-                data_dst = activations_dict[layer_cur]
+                data_src = hlp.get_activations_input(layer_cur.replace('.instnorm', '.conv'), activations_dict)
+                data_dst = hlp.get_activations_output(layer_cur, activations_dict)
                 data_gt = activations_dict['gt']
 
                 #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
                 #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
                 data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
                 data_dst_gt = torch.nn.functional.interpolate(data_gt, data_dst.shape[2:], mode='bilinear').ceil()
-
-                if '.instnorm' in layer_pre:
-                    data_src = torch.where(data_src > 0, data_src, data_src * 0.01)
-                if layer_pre.startswith('tu.'):
-                    d = int(layer_pre.replace('tu.', ''))
-                    conv_blocks_context = activations_dict['conv_blocks_context.{}.blocks.1.instnorm'.format(3-d)]
-                    conv_blocks_context = torch.where(conv_blocks_context > 0, conv_blocks_context, conv_blocks_context * 0.01)
-                    data_src = torch.cat((data_src, conv_blocks_context), axis=1)
-                
                 
                 data_src = data_src.movedim(1, -1).numpy()
                 data_src_gt = data_src_gt.movedim(1, -1).numpy()
@@ -353,14 +331,20 @@ def plot_roughness_and_confidence_grouped():
         pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
     ])
     stats_weights['name'] = stats_weights['name'].str.replace('.weight', '')
+    # take .conv weights if instancenorm was last layer
+    stats_weights = stats_weights[~stats_weights['name'].str.endswith('.instnorm')]
+    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.instnorm')
     stats_weights = stats_weights[['trainer', 'fold_train', 'epoch', 'name', 'norm_frob', 'norm_spectral']]
 
     # TODO
+    stats = stats[~stats['layer'].str.startswith('conv_blocks_context.0.blocks.0')]
     stats = stats[~stats['layer'].str.startswith('seg_outputs')]
     stats = stats[~stats['layer'].str.startswith('tu')]
-    stats['layer'] = stats['layer'].str.replace('.instnorm', '.conv')
     # 
-    stats = stats.join(stats_weights.set_index(['trainer', 'fold_train', 'epoch', 'name']), on=['trainer', 'fold_train', 'epoch', 'layer'])
+    stats = stats.join(
+        stats_weights.set_index(['trainer', 'fold_train', 'epoch', 'name']),
+        on=['trainer', 'fold_train', 'epoch', 'layer']
+    )
 
     columns = [
         'roughness',
@@ -414,6 +398,9 @@ def plot_roughness_and_confidence_grouped():
         iou_score_mean=('iou_score_mean', 'first'),
         dice_score_mean=('dice_score_mean', 'first'),
         sdice_score_mean=('sdice_score_mean', 'first'),
+        #fold_test=('fold_test', 'first'),
+        epoch=('epoch', 'first'),
+        #is_validation=('is_validation', 'first'),
     )
     layered_line_columns = stats_layered['line'].unique()
     stats_layered = stats_layered.pivot(
@@ -486,6 +473,7 @@ def plot_roughness_and_confidence_grouped():
             kind='line',
             column_subplots='subplot',
             column_color='iou_score_mean',
+            #column_color='epoch',
             #column_color='sdice_score_mean',
             colors=stats_layered_colors,
             ncols=2,
@@ -563,7 +551,7 @@ folds = [
 epochs = [10,20,30,40,80,120]
 
 
-#calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
+calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
 plot_roughness_and_confidence_grouped()
 
 

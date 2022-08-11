@@ -1,54 +1,103 @@
 import os
 import pandas as pd
 import numpy as np
+import torch
+from functools import lru_cache
 
 def get_layers_ordered():
     return [
         'conv_blocks_context.0.blocks.0.conv',
         'conv_blocks_context.0.blocks.0.instnorm',
+        'conv_blocks_context.0.blocks.0.relu',
         'conv_blocks_context.0.blocks.1.conv',
         'conv_blocks_context.0.blocks.1.instnorm',
+        'conv_blocks_context.0.blocks.1.relu',
         'conv_blocks_context.1.blocks.0.conv',
         'conv_blocks_context.1.blocks.0.instnorm',
+        'conv_blocks_context.1.blocks.0.relu',
         'conv_blocks_context.1.blocks.1.conv',
         'conv_blocks_context.1.blocks.1.instnorm',
+        'conv_blocks_context.1.blocks.1.relu',
         'conv_blocks_context.2.blocks.0.conv',
         'conv_blocks_context.2.blocks.0.instnorm',
+        'conv_blocks_context.2.blocks.0.relu',
         'conv_blocks_context.2.blocks.1.conv',
         'conv_blocks_context.2.blocks.1.instnorm',
+        'conv_blocks_context.2.blocks.1.relu',
         'conv_blocks_context.3.blocks.0.conv',
         'conv_blocks_context.3.blocks.0.instnorm',
+        'conv_blocks_context.3.blocks.0.relu',
         'conv_blocks_context.3.blocks.1.conv',
         'conv_blocks_context.3.blocks.1.instnorm',
+        'conv_blocks_context.3.blocks.1.relu',
         'conv_blocks_context.4.0.blocks.0.conv',
         'conv_blocks_context.4.0.blocks.0.instnorm',
+        'conv_blocks_context.4.0.blocks.0.relu',
         'conv_blocks_context.4.1.blocks.0.conv',
         'conv_blocks_context.4.1.blocks.0.instnorm',
+        'conv_blocks_context.4.1.blocks.0.relu',
         'tu.0',
         'conv_blocks_localization.0.0.blocks.0.conv',
         'conv_blocks_localization.0.0.blocks.0.instnorm',
+        'conv_blocks_localization.0.0.blocks.0.relu',
         'conv_blocks_localization.0.1.blocks.0.conv',
         'conv_blocks_localization.0.1.blocks.0.instnorm',
+        'conv_blocks_localization.0.1.blocks.0.relu',
         'seg_outputs.0',
         'tu.1',
         'conv_blocks_localization.1.0.blocks.0.conv',
         'conv_blocks_localization.1.0.blocks.0.instnorm',
+        'conv_blocks_localization.1.0.blocks.0.relu',
         'conv_blocks_localization.1.1.blocks.0.conv',
         'conv_blocks_localization.1.1.blocks.0.instnorm',
+        'conv_blocks_localization.1.1.blocks.0.relu',
         'seg_outputs.1',
         'tu.2',
         'conv_blocks_localization.2.0.blocks.0.conv',
         'conv_blocks_localization.2.0.blocks.0.instnorm',
+        'conv_blocks_localization.2.0.blocks.0.relu',
         'conv_blocks_localization.2.1.blocks.0.conv',
         'conv_blocks_localization.2.1.blocks.0.instnorm',
+        'conv_blocks_localization.2.1.blocks.0.relu',
         'seg_outputs.2',
         'tu.3',
         'conv_blocks_localization.3.0.blocks.0.conv',
         'conv_blocks_localization.3.0.blocks.0.instnorm',
+        'conv_blocks_localization.3.0.blocks.0.relu',
         'conv_blocks_localization.3.1.blocks.0.conv',
         'conv_blocks_localization.3.1.blocks.0.instnorm',
+        'conv_blocks_localization.3.1.blocks.0.relu',
         'seg_outputs.3',
     ]
+
+@lru_cache
+def get_layers_position_map():
+    return dict(map(reversed, enumerate(get_layers_ordered())))
+
+def get_previous_layer(layer_name):
+    layer_position_map = get_layers_position_map()
+    pos_pre = layer_position_map[layer_name] - 1
+    if pos_pre < 0:
+        return 'input'
+    layer_pre = get_layers_ordered()[pos_pre]
+    if layer_pre.startswith('seg_outputs.'):
+        return get_previous_layer(layer_pre)
+    return layer_pre
+
+def get_activations_input(layer_name, activations_dict):
+    layer_pre = get_previous_layer(layer_name)
+    data = get_activations_output(layer_pre, activations_dict)
+    if layer_pre.startswith('tu.'):
+        d = int(layer_pre.replace('tu.', ''))
+        conv_blocks_context = get_activations_output('conv_blocks_context.{}.blocks.1.instnorm'.format(3-d), activations_dict)
+        return torch.cat((data, conv_blocks_context), axis=1)
+    return data
+
+def get_activations_output(layer_name, activations_dict):
+    if layer_name.endswith('.relu'):
+        data = get_activations_input(layer_name, activations_dict)
+        return torch.where(data > 0, data, data * 0.01)
+    return activations_dict.get(layer_name, None)
 
 def get_layer_config(layer_name):
     if layer_name.startswith('seg_outputs.'):
@@ -77,10 +126,6 @@ def get_trainer_short(x):
         'wd0' not in x,
         'noDA' not in x
     )
-
-
-def get_layers_position_map():
-    return dict(map(reversed, enumerate(get_layers_ordered())))
 
 
 def get_fold_id_mapping():
