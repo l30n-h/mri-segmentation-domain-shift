@@ -351,6 +351,7 @@ def main():
     )
     trainer.load_checkpoint_ram(params[0], False)
     
+    dataset_keys = None
     if args.dataset_keys_path is None:
         print("full dataset used")
     else:
