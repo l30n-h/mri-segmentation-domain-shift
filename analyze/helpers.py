@@ -181,16 +181,18 @@ def load_model(trainer, fold, epoch, folder_train='archive/old/nnUNet-container/
         tmodel.network.eval()
     return tmodel
 
-def generate_predictions_ram(trainer, dataset_keys=None):
+def generate_predictions_ram(trainer, dataset_keys=None, activations_extractor_kwargs={}):
     return predict_preprocessed_ram(
         trainer=trainer,
-        activations_extractor=act_ext.activations_extractor(),
-        dataset_keys=None,
+        activations_extractor=act_ext.activations_extractor(
+            **activations_extractor_kwargs
+        ),
+        dataset_keys=dataset_keys,
         do_mirroring=False,
         # use_sliding_window=True,
         # step_size=0.5,
         # use_gaussian=True,
-        #all_in_gpu=False
+        # all_in_gpu=False
     )
 
 
