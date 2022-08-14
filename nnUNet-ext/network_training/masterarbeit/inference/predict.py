@@ -31,6 +31,7 @@ from nnunet.training.model_restore import load_model_and_checkpoint_files
 from nnunet.training.network_training.nnUNetTrainer import nnUNetTrainer
 from nnunet.utilities.one_hot_encoding import to_one_hot
 
+import nnunet.training.network_training.masterarbeit.inference.activations_extraction as act_ext
 
 def preprocess_save_to_queue(preprocess_fn, q, list_of_lists, output_files, segs_from_prev_stage, classes,
                              transpose_forward):
@@ -200,6 +201,10 @@ def predict_cases(model, list_of_lists, output_filenames, folds, save_npz, num_t
     print("starting preprocessing generator")
     preprocessing = preprocess_multithreaded(trainer, list_of_lists, cleaned_output_files, num_threads_preprocessing,
                                              segs_from_prev_stage)
+
+    activations_extractor = act_ext.create_activations_extractor_from_env()
+    activations_extractor.set_trainer(trainer)
+
     print("starting prediction...")
     all_output_files = []
     for preprocessed in preprocessing:
@@ -213,26 +218,46 @@ def predict_cases(model, list_of_lists, output_filenames, folds, save_npz, num_t
         print("predicting", output_filename)
         trainer.load_checkpoint_ram(params[0], False)
         
-        if hasattr(trainer, 'pre_predict'):
-            trainer.pre_predict()
+        
+        activations_extractor.reset_activations_dict()
         
         softmax = trainer.predict_preprocessed_data_return_seg_and_softmax(
             d, do_mirroring=do_tta, mirror_axes=trainer.data_aug_params['mirror_axes'], use_sliding_window=True,
             step_size=step_size, use_gaussian=True, all_in_gpu=all_in_gpu,
             mixed_precision=mixed_precision)[1]
 
-        if hasattr(trainer, 'post_predict'):
-            trainer.post_predict()
+        activations_dict = act_ext.dict_map(
+            lambda x: x.cpu(),
+            activations_extractor.get_activations_dict()
+        )
 
         for p in params[1:]:
             trainer.load_checkpoint_ram(p, False)
+
+            activations_extractor.reset_activations_dict()
+
             softmax += trainer.predict_preprocessed_data_return_seg_and_softmax(
                 d, do_mirroring=do_tta, mirror_axes=trainer.data_aug_params['mirror_axes'], use_sliding_window=True,
                 step_size=step_size, use_gaussian=True, all_in_gpu=all_in_gpu,
                 mixed_precision=mixed_precision)[1]
+            
+            activations_dict2 = act_ext.dict_map(
+                lambda x: x.cpu(),
+                activations_extractor.get_activations_dict()
+            )
+
+            activations_dict = dict(map(
+                lambda key: (key, activations_dict[key] + activations_dict2[key]),
+                activations_dict.keys()
+            ))
 
         if len(params) > 1:
             softmax /= len(params)
+
+            activations_dict = dict(map(
+                lambda key: (key, activations_dict[key] / len(params)),
+                activations_dict.keys()
+            ))
 
         transpose_forward = trainer.plans.get('transpose_forward')
         if transpose_forward is not None:
@@ -270,10 +295,9 @@ def predict_cases(model, list_of_lists, output_filenames, folds, save_npz, num_t
                                             None, None,
                                             npz_file, None, force_separate_z, interpolation_order_z),)
                                           ))
-        if hasattr(trainer, 'get_async_save_predict_and_args'):
-            results.append(pool.apply_async(
-                *trainer.get_async_save_predict_and_args(output_filename[:-7])
-            ))
+        results.append(pool.apply_async(
+            act_ext.save_activations_dict, (activations_dict, output_filename[:-7])
+        ))
 
     print("inference done. Now waiting for the segmentation export to finish...")
     _ = [i.get() for i in results]
@@ -285,279 +309,6 @@ def predict_cases(model, list_of_lists, output_filenames, folds, save_npz, num_t
         if isfile(pp_file):
             print("postprocessing...")
             shutil.copy(pp_file, os.path.abspath(os.path.dirname(output_filenames[0])))
-            # for_which_classes stores for which of the classes everything but the largest connected component needs to be
-            # removed
-            for_which_classes, min_valid_obj_size = load_postprocessing(pp_file)
-            results.append(pool.starmap_async(load_remove_save,
-                                              zip(output_filenames, output_filenames,
-                                                  [for_which_classes] * len(output_filenames),
-                                                  [min_valid_obj_size] * len(output_filenames))))
-            _ = [i.get() for i in results]
-        else:
-            print("WARNING! Cannot run postprocessing because the postprocessing file is missing. Make sure to run "
-                  "consolidate_folds in the output folder of the model first!\nThe folder you need to run this in is "
-                  "%s" % model)
-
-    pool.close()
-    pool.join()
-
-
-def predict_cases_fast(model, list_of_lists, output_filenames, folds, num_threads_preprocessing,
-                       num_threads_nifti_save, segs_from_prev_stage=None, do_tta=True, mixed_precision=True,
-                       overwrite_existing=False,
-                       all_in_gpu=False, step_size=0.5, checkpoint_name="model_final_checkpoint",
-                       segmentation_export_kwargs: dict = None, disable_postprocessing: bool = False):
-    assert len(list_of_lists) == len(output_filenames)
-    if segs_from_prev_stage is not None: assert len(segs_from_prev_stage) == len(output_filenames)
-
-    pool = Pool(num_threads_nifti_save)
-    results = []
-
-    cleaned_output_files = []
-    for o in output_filenames:
-        dr, f = os.path.split(o)
-        if len(dr) > 0:
-            maybe_mkdir_p(dr)
-        if not f.endswith(".nii.gz"):
-            f, _ = os.path.splitext(f)
-            f = f + ".nii.gz"
-        cleaned_output_files.append(join(dr, f))
-
-    if not overwrite_existing:
-        print("number of cases:", len(list_of_lists))
-        not_done_idx = [i for i, j in enumerate(cleaned_output_files) if not isfile(j)]
-
-        cleaned_output_files = [cleaned_output_files[i] for i in not_done_idx]
-        list_of_lists = [list_of_lists[i] for i in not_done_idx]
-        if segs_from_prev_stage is not None:
-            segs_from_prev_stage = [segs_from_prev_stage[i] for i in not_done_idx]
-
-        print("number of cases that still need to be predicted:", len(cleaned_output_files))
-
-    print("emptying cuda cache")
-    torch.cuda.empty_cache()
-
-    print("loading parameters for folds,", folds)
-    trainer, params = load_model_and_checkpoint_files(model, folds, mixed_precision=mixed_precision,
-                                                      checkpoint_name=checkpoint_name)
-
-    if segmentation_export_kwargs is None:
-        if 'segmentation_export_params' in trainer.plans.keys():
-            force_separate_z = trainer.plans['segmentation_export_params']['force_separate_z']
-            interpolation_order = trainer.plans['segmentation_export_params']['interpolation_order']
-            interpolation_order_z = trainer.plans['segmentation_export_params']['interpolation_order_z']
-        else:
-            force_separate_z = None
-            interpolation_order = 1
-            interpolation_order_z = 0
-    else:
-        force_separate_z = segmentation_export_kwargs['force_separate_z']
-        interpolation_order = segmentation_export_kwargs['interpolation_order']
-        interpolation_order_z = segmentation_export_kwargs['interpolation_order_z']
-
-    print("starting preprocessing generator")
-    preprocessing = preprocess_multithreaded(trainer, list_of_lists, cleaned_output_files, num_threads_preprocessing,
-                                             segs_from_prev_stage)
-
-    print("starting prediction...")
-    for preprocessed in preprocessing:
-        print("getting data from preprocessor")
-        output_filename, (d, dct) = preprocessed
-        print("got something")
-        if isinstance(d, str):
-            print("what I got is a string, so I need to load a file")
-            data = np.load(d)
-            os.remove(d)
-            d = data
-
-        # preallocate the output arrays
-        # same dtype as the return value in predict_preprocessed_data_return_seg_and_softmax (saves time)
-        softmax_aggr = None  # np.zeros((trainer.num_classes, *d.shape[1:]), dtype=np.float16)
-        all_seg_outputs = np.zeros((len(params), *d.shape[1:]), dtype=int)
-        print("predicting", output_filename)
-
-        for i, p in enumerate(params):
-            trainer.load_checkpoint_ram(p, False)
-
-            res = trainer.predict_preprocessed_data_return_seg_and_softmax(d, do_mirroring=do_tta,
-                                                                           mirror_axes=trainer.data_aug_params['mirror_axes'],
-                                                                           use_sliding_window=True,
-                                                                           step_size=step_size, use_gaussian=True,
-                                                                           all_in_gpu=all_in_gpu,
-                                                                           mixed_precision=mixed_precision)
-
-            if len(params) > 1:
-                # otherwise we dont need this and we can save ourselves the time it takes to copy that
-                print("aggregating softmax")
-                if softmax_aggr is None:
-                    softmax_aggr = res[1]
-                else:
-                    softmax_aggr += res[1]
-            all_seg_outputs[i] = res[0]
-
-        print("obtaining segmentation map")
-        if len(params) > 1:
-            # we dont need to normalize the softmax by 1 / len(params) because this would not change the outcome of the argmax
-            seg = softmax_aggr.argmax(0)
-        else:
-            seg = all_seg_outputs[0]
-
-        print("applying transpose_backward")
-        transpose_forward = trainer.plans.get('transpose_forward')
-        if transpose_forward is not None:
-            transpose_backward = trainer.plans.get('transpose_backward')
-            seg = seg.transpose([i for i in transpose_backward])
-
-        if hasattr(trainer, 'regions_class_order'):
-            region_class_order = trainer.regions_class_order
-        else:
-            region_class_order = None
-        assert region_class_order is None, "predict_cases_fast can only work with regular softmax predictions " \
-                                           "and is therefore unable to handle trainer classes with region_class_order"
-
-        print("initializing segmentation export")
-        results.append(pool.starmap_async(save_segmentation_nifti,
-                                          ((seg, output_filename, dct, interpolation_order, force_separate_z,
-                                            interpolation_order_z),)
-                                          ))
-        print("done")
-
-    print("inference done. Now waiting for the segmentation export to finish...")
-    _ = [i.get() for i in results]
-    # now apply postprocessing
-    # first load the postprocessing properties if they are present. Else raise a well visible warning
-
-    if not disable_postprocessing:
-        results = []
-        pp_file = join(model, "postprocessing.json")
-        if isfile(pp_file):
-            print("postprocessing...")
-            shutil.copy(pp_file, os.path.dirname(output_filenames[0]))
-            # for_which_classes stores for which of the classes everything but the largest connected component needs to be
-            # removed
-            for_which_classes, min_valid_obj_size = load_postprocessing(pp_file)
-            results.append(pool.starmap_async(load_remove_save,
-                                              zip(output_filenames, output_filenames,
-                                                  [for_which_classes] * len(output_filenames),
-                                                  [min_valid_obj_size] * len(output_filenames))))
-            _ = [i.get() for i in results]
-        else:
-            print("WARNING! Cannot run postprocessing because the postprocessing file is missing. Make sure to run "
-                  "consolidate_folds in the output folder of the model first!\nThe folder you need to run this in is "
-                  "%s" % model)
-
-    pool.close()
-    pool.join()
-
-
-def predict_cases_fastest(model, list_of_lists, output_filenames, folds, num_threads_preprocessing,
-                          num_threads_nifti_save, segs_from_prev_stage=None, do_tta=True, mixed_precision=True,
-                          overwrite_existing=False, all_in_gpu=False, step_size=0.5,
-                          checkpoint_name="model_final_checkpoint", disable_postprocessing: bool = False):
-    assert len(list_of_lists) == len(output_filenames)
-    if segs_from_prev_stage is not None: assert len(segs_from_prev_stage) == len(output_filenames)
-
-    pool = Pool(num_threads_nifti_save)
-    results = []
-
-    cleaned_output_files = []
-    for o in output_filenames:
-        dr, f = os.path.split(o)
-        if len(dr) > 0:
-            maybe_mkdir_p(dr)
-        if not f.endswith(".nii.gz"):
-            f, _ = os.path.splitext(f)
-            f = f + ".nii.gz"
-        cleaned_output_files.append(join(dr, f))
-
-    if not overwrite_existing:
-        print("number of cases:", len(list_of_lists))
-        not_done_idx = [i for i, j in enumerate(cleaned_output_files) if not isfile(j)]
-
-        cleaned_output_files = [cleaned_output_files[i] for i in not_done_idx]
-        list_of_lists = [list_of_lists[i] for i in not_done_idx]
-        if segs_from_prev_stage is not None:
-            segs_from_prev_stage = [segs_from_prev_stage[i] for i in not_done_idx]
-
-        print("number of cases that still need to be predicted:", len(cleaned_output_files))
-
-    print("emptying cuda cache")
-    torch.cuda.empty_cache()
-
-    print("loading parameters for folds,", folds)
-    trainer, params = load_model_and_checkpoint_files(model, folds, mixed_precision=mixed_precision,
-                                                      checkpoint_name=checkpoint_name)
-
-    print("starting preprocessing generator")
-    preprocessing = preprocess_multithreaded(trainer, list_of_lists, cleaned_output_files, num_threads_preprocessing,
-                                             segs_from_prev_stage)
-
-    print("starting prediction...")
-    for preprocessed in preprocessing:
-        print("getting data from preprocessor")
-        output_filename, (d, dct) = preprocessed
-        print("got something")
-        if isinstance(d, str):
-            print("what I got is a string, so I need to load a file")
-            data = np.load(d)
-            os.remove(d)
-            d = data
-
-        # preallocate the output arrays
-        # same dtype as the return value in predict_preprocessed_data_return_seg_and_softmax (saves time)
-        all_softmax_outputs = np.zeros((len(params), trainer.num_classes, *d.shape[1:]), dtype=np.float16)
-        all_seg_outputs = np.zeros((len(params), *d.shape[1:]), dtype=int)
-        print("predicting", output_filename)
-
-        for i, p in enumerate(params):
-            trainer.load_checkpoint_ram(p, False)
-            res = trainer.predict_preprocessed_data_return_seg_and_softmax(d, do_mirroring=do_tta,
-                                                                           mirror_axes=trainer.data_aug_params['mirror_axes'],
-                                                                           use_sliding_window=True,
-                                                                           step_size=step_size, use_gaussian=True,
-                                                                           all_in_gpu=all_in_gpu,
-                                                                           mixed_precision=mixed_precision)
-            if len(params) > 1:
-                # otherwise we dont need this and we can save ourselves the time it takes to copy that
-                all_softmax_outputs[i] = res[1]
-            all_seg_outputs[i] = res[0]
-
-        if hasattr(trainer, 'regions_class_order'):
-            region_class_order = trainer.regions_class_order
-        else:
-            region_class_order = None
-        assert region_class_order is None, "predict_cases_fastest can only work with regular softmax predictions " \
-                                           "and is therefore unable to handle trainer classes with region_class_order"
-
-        print("aggregating predictions")
-        if len(params) > 1:
-            softmax_mean = np.mean(all_softmax_outputs, 0)
-            seg = softmax_mean.argmax(0)
-        else:
-            seg = all_seg_outputs[0]
-
-        print("applying transpose_backward")
-        transpose_forward = trainer.plans.get('transpose_forward')
-        if transpose_forward is not None:
-            transpose_backward = trainer.plans.get('transpose_backward')
-            seg = seg.transpose([i for i in transpose_backward])
-
-        print("initializing segmentation export")
-        results.append(pool.starmap_async(save_segmentation_nifti,
-                                          ((seg, output_filename, dct, 0, None),)
-                                          ))
-        print("done")
-
-    print("inference done. Now waiting for the segmentation export to finish...")
-    _ = [i.get() for i in results]
-    # now apply postprocessing
-    # first load the postprocessing properties if they are present. Else raise a well visible warning
-    if not disable_postprocessing:
-        results = []
-        pp_file = join(model, "postprocessing.json")
-        if isfile(pp_file):
-            print("postprocessing...")
-            shutil.copy(pp_file, os.path.dirname(output_filenames[0]))
             # for_which_classes stores for which of the classes everything but the largest connected component needs to be
             # removed
             for_which_classes, min_valid_obj_size = load_postprocessing(pp_file)
@@ -672,33 +423,6 @@ def predict_from_folder(model: str, input_folder: str, output_folder: str, folds
                              step_size=step_size, checkpoint_name=checkpoint_name,
                              segmentation_export_kwargs=segmentation_export_kwargs,
                              disable_postprocessing=disable_postprocessing)
-    elif mode == "fast":
-        if overwrite_all_in_gpu is None:
-            all_in_gpu = False
-        else:
-            all_in_gpu = overwrite_all_in_gpu
-
-        assert save_npz is False
-        return predict_cases_fast(model, list_of_lists[part_id::num_parts], output_files[part_id::num_parts], folds,
-                                  num_threads_preprocessing, num_threads_nifti_save, lowres_segmentations,
-                                  tta, mixed_precision=mixed_precision, overwrite_existing=overwrite_existing,
-                                  all_in_gpu=all_in_gpu,
-                                  step_size=step_size, checkpoint_name=checkpoint_name,
-                                  segmentation_export_kwargs=segmentation_export_kwargs,
-                                  disable_postprocessing=disable_postprocessing)
-    elif mode == "fastest":
-        if overwrite_all_in_gpu is None:
-            all_in_gpu = False
-        else:
-            all_in_gpu = overwrite_all_in_gpu
-
-        assert save_npz is False
-        return predict_cases_fastest(model, list_of_lists[part_id::num_parts], output_files[part_id::num_parts], folds,
-                                     num_threads_preprocessing, num_threads_nifti_save, lowres_segmentations,
-                                     tta, mixed_precision=mixed_precision, overwrite_existing=overwrite_existing,
-                                     all_in_gpu=all_in_gpu,
-                                     step_size=step_size, checkpoint_name=checkpoint_name,
-                                     disable_postprocessing=disable_postprocessing)
     else:
         raise ValueError("unrecognized mode. Must be normal, fast or fastest")
 

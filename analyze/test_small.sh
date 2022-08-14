@@ -31,7 +31,6 @@ testset_suffix='-small'
 activations_suffix="${testset_suffix}-fullmap"
 
 export MA_USE_TEST_HOOKS=TRUE
-export MA_TEST_INCLUDE_GT=TRUE
 
 for trainer in "${trainers[@]}"
 do

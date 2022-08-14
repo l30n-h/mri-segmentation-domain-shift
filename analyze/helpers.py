@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 import torch
 from functools import lru_cache
+from nnunet.training.model_restore import load_model_and_checkpoint_files
+from nnunet.training.network_training.masterarbeit.inference.predict_preprocessed import predict_preprocessed_ram
+import nnunet.training.network_training.masterarbeit.inference.activations_extraction as act_ext
 
 def get_layers_ordered():
     return [
@@ -162,6 +165,34 @@ def get_testdata_dir(task, trainer, fold_train, epoch, folder_test='archive/old/
         '{}-ep{:0>3}-{}'.format(tester, epoch, fold_train)
     )
     return directory_testout
+
+
+
+def load_model(trainer, fold, epoch, folder_train='archive/old/nnUNet-container/data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training', eval=True, use_test_hooks=True, test_include_gt=True):
+    tmodel, params = load_model_and_checkpoint_files(
+        os.path.join(folder_train, trainer),
+        get_fold_id_mapping()[fold],
+        mixed_precision=True,
+        checkpoint_name='model_ep_{:0>3}'.format(epoch)
+    )
+    if epoch > 0:
+        tmodel.load_checkpoint_ram(params[0], False)
+    if eval == True:
+        tmodel.network.eval()
+    return tmodel
+
+def generate_predictions_ram(trainer, dataset_keys=None):
+    return predict_preprocessed_ram(
+        trainer=trainer,
+        activations_extractor=act_ext.activations_extractor(),
+        dataset_keys=None,
+        do_mirroring=False,
+        # use_sliding_window=True,
+        # step_size=0.5,
+        # use_gaussian=True,
+        #all_in_gpu=False
+    )
+
 
 def get_scores(task, trainer, fold_train, epoch, **kwargs):
     directory_testout = get_testdata_dir(task, trainer, fold_train, epoch, **kwargs)
@@ -406,8 +437,8 @@ def get_moments(name, value, dim=None, keepdim=False):
     dim_str = "-".join(map(str, dim)) if isinstance(dim, (list, tuple)) else str(dim)
     yield '{}_mean_{}'.format(name, dim_str), value.mean(dim=dim, keepdim=keepdim) # brighness
     yield '{}_std_{}'.format(name, dim_str), value.std(dim=dim, keepdim=keepdim) # rms contrast
-    # yield '{}_skewness_{}'.format(name, dim_str), hlp.standardized_moment(value, order=3, dim=dim, keepdim=keepdim)
-    # yield '{}_kurtosis_{}'.format(name, dim_str), hlp.standardized_moment(value, order=4, dim=dim, keepdim=keepdim)
+    # yield '{}_skewness_{}'.format(name, dim_str), standardized_moment(value, order=3, dim=dim, keepdim=keepdim)
+    # yield '{}_kurtosis_{}'.format(name, dim_str), standardized_moment(value, order=4, dim=dim, keepdim=keepdim)
 
 def get_dims(a):
     if a.shape[0] > 1 and a.shape[1] > 1:

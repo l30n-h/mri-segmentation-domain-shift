@@ -13,9 +13,68 @@ from nnunet.paths import default_plans_identifier, network_training_output_dir, 
 from nnunet.postprocessing.connected_components import determine_postprocessing
 from nnunet.training.model_restore import load_model_and_checkpoint_files
 from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
-    
 
-def predict_preprocessed(
+import nnunet.training.network_training.masterarbeit.inference.activations_extraction as act_ext
+
+
+def predict_preprocessed_ram(
+    trainer,
+    activations_extractor=None,
+    dataset_keys=None,
+    do_mirroring: bool = True,
+    use_sliding_window: bool = True,
+    step_size: float = 0.5,
+    use_gaussian: bool = True,
+    all_in_gpu: bool = False,
+):
+    assert trainer.network.training == False, "must set mode to eval"
+    assert trainer.was_initialized, "must initialize, ideally with checkpoint (or train first)"
+    if trainer.dataset is None:
+        trainer.load_dataset()
+        trainer.do_split()
+
+    if do_mirroring:
+        if not trainer.data_aug_params['do_mirror']:
+            raise RuntimeError("We did not train with mirroring so you cannot do inference with mirroring enabled")
+        mirror_axes = trainer.data_aug_params['mirror_axes']
+    else:
+        mirror_axes = ()
+
+    if dataset_keys is None:
+        dataset_keys = trainer.dataset.keys()
+
+    if activations_extractor is not None:
+        activations_extractor.set_trainer(trainer)
+
+    for k in dataset_keys:
+        data = np.load(trainer.dataset[k]['data_file'])['data']
+
+        data[-1][data[-1] == -1] = 0
+        if activations_extractor is None or not activations_extractor.is_active():
+            data = data[:-1]
+
+        if activations_extractor is not None:
+            activations_extractor.reset_activations_dict()
+
+        softmax_pred = trainer.predict_preprocessed_data_return_seg_and_softmax(
+            data,
+            do_mirroring=do_mirroring,
+            mirror_axes=mirror_axes,
+            use_sliding_window=use_sliding_window,
+            step_size=step_size,
+            use_gaussian=use_gaussian,
+            all_in_gpu=all_in_gpu,
+            mixed_precision=trainer.fp16
+        )[1]
+
+        activations_dict = {}
+        if activations_extractor is not None:
+            activations_dict = activations_extractor.get_activations_dict()
+
+        softmax_pred = softmax_pred.transpose([0] + [i + 1 for i in trainer.transpose_backward])
+        yield k, softmax_pred, activations_dict
+
+def predict_preprocessed_fs(
     trainer,
     output_folder,
     dataset_keys=None,
@@ -77,52 +136,24 @@ def predict_preprocessed(
     }
     save_json(my_input_args, join(output_folder_prediction, "prediction_args.json"))
 
-    if do_mirroring:
-        if not trainer.data_aug_params['do_mirror']:
-            raise RuntimeError("We did not train with mirroring so you cannot do inference with mirroring enabled")
-        mirror_axes = trainer.data_aug_params['mirror_axes']
-    else:
-        mirror_axes = ()
-
     pred_gt_tuples = []
 
     export_pool = Pool(num_threads)
     results = []
 
-    if dataset_keys is None:
-        dataset_keys = trainer.dataset.keys()
-
-    for k in dataset_keys:
+    for k, softmax_pred, activations_dict in predict_preprocessed_ram(
+        trainer=trainer,
+        activations_extractor=act_ext.create_activations_extractor_from_env(),
+        dataset_keys=dataset_keys,
+        do_mirroring=do_mirroring,
+        use_sliding_window=use_sliding_window,
+        step_size=step_size,
+        use_gaussian=use_gaussian,
+        all_in_gpu=all_in_gpu
+    ):
         properties = load_pickle(trainer.dataset[k]['properties_file'])
         fname = properties['list_of_data_files'][0].split("/")[-1][:-12]
         if overwrite or (not isfile(join(output_folder_prediction, fname + ".nii.gz"))) or (save_softmax and not isfile(join(output_folder_prediction, fname + ".npz"))):
-            data = np.load(trainer.dataset[k]['data_file'])['data']
-
-            print(k, data.shape)
-            data[-1][data[-1] == -1] = 0
-
-            if hasattr(trainer, 'pre_predict'):
-                trainer.pre_predict()
-
-            if not (hasattr(trainer, 'test_include_gt') and trainer.test_include_gt):
-                data = data[:-1]
-
-            softmax_pred = trainer.predict_preprocessed_data_return_seg_and_softmax(
-                data,
-                do_mirroring=do_mirroring,
-                mirror_axes=mirror_axes,
-                use_sliding_window=use_sliding_window,
-                step_size=step_size,
-                use_gaussian=use_gaussian,
-                all_in_gpu=all_in_gpu,
-                mixed_precision=trainer.fp16
-            )[1]
-
-            if hasattr(trainer, 'post_predict'):
-                trainer.post_predict()
-
-            softmax_pred = softmax_pred.transpose([0] + [i + 1 for i in trainer.transpose_backward])
-
             if save_softmax:
                 softmax_fname = join(output_folder_prediction, fname + ".npz")
             else:
@@ -152,14 +183,16 @@ def predict_preprocessed(
                 )
             )
 
-            if hasattr(trainer, 'get_async_save_predict_and_args'):
-                results.append(
-                    export_pool.apply_async(
-                        *trainer.get_async_save_predict_and_args(
-                            join(output_folder_prediction, fname)
-                        )
-                    )
+            activations_dict = act_ext.dict_map(
+                lambda x: x.cpu(),
+                activations_dict
+            )
+            results.append(export_pool.apply_async(
+                act_ext.save_activations_dict, (
+                    activations_dict,
+                    join(output_folder_prediction, fname)
                 )
+            ))
 
         pred_gt_tuples.append([
             join(output_folder_prediction, fname + ".nii.gz"),
@@ -360,7 +393,7 @@ def main():
             dataset_keys = json.load(f)
             print(dataset_keys)
 
-    predict_preprocessed(
+    predict_preprocessed_fs(
         trainer,
         output_folder,
         dataset_keys=dataset_keys,
