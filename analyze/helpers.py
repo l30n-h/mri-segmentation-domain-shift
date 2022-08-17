@@ -11,65 +11,65 @@ def get_layers_ordered():
     return [
         'conv_blocks_context.0.blocks.0.conv',
         'conv_blocks_context.0.blocks.0.instnorm',
-        'conv_blocks_context.0.blocks.0.relu',
+        'conv_blocks_context.0.blocks.0.lrelu',
         'conv_blocks_context.0.blocks.1.conv',
         'conv_blocks_context.0.blocks.1.instnorm',
-        'conv_blocks_context.0.blocks.1.relu',
+        'conv_blocks_context.0.blocks.1.lrelu',
         'conv_blocks_context.1.blocks.0.conv',
         'conv_blocks_context.1.blocks.0.instnorm',
-        'conv_blocks_context.1.blocks.0.relu',
+        'conv_blocks_context.1.blocks.0.lrelu',
         'conv_blocks_context.1.blocks.1.conv',
         'conv_blocks_context.1.blocks.1.instnorm',
-        'conv_blocks_context.1.blocks.1.relu',
+        'conv_blocks_context.1.blocks.1.lrelu',
         'conv_blocks_context.2.blocks.0.conv',
         'conv_blocks_context.2.blocks.0.instnorm',
-        'conv_blocks_context.2.blocks.0.relu',
+        'conv_blocks_context.2.blocks.0.lrelu',
         'conv_blocks_context.2.blocks.1.conv',
         'conv_blocks_context.2.blocks.1.instnorm',
-        'conv_blocks_context.2.blocks.1.relu',
+        'conv_blocks_context.2.blocks.1.lrelu',
         'conv_blocks_context.3.blocks.0.conv',
         'conv_blocks_context.3.blocks.0.instnorm',
-        'conv_blocks_context.3.blocks.0.relu',
+        'conv_blocks_context.3.blocks.0.lrelu',
         'conv_blocks_context.3.blocks.1.conv',
         'conv_blocks_context.3.blocks.1.instnorm',
-        'conv_blocks_context.3.blocks.1.relu',
+        'conv_blocks_context.3.blocks.1.lrelu',
         'conv_blocks_context.4.0.blocks.0.conv',
         'conv_blocks_context.4.0.blocks.0.instnorm',
-        'conv_blocks_context.4.0.blocks.0.relu',
+        'conv_blocks_context.4.0.blocks.0.lrelu',
         'conv_blocks_context.4.1.blocks.0.conv',
         'conv_blocks_context.4.1.blocks.0.instnorm',
-        'conv_blocks_context.4.1.blocks.0.relu',
+        'conv_blocks_context.4.1.blocks.0.lrelu',
         'tu.0',
         'conv_blocks_localization.0.0.blocks.0.conv',
         'conv_blocks_localization.0.0.blocks.0.instnorm',
-        'conv_blocks_localization.0.0.blocks.0.relu',
+        'conv_blocks_localization.0.0.blocks.0.lrelu',
         'conv_blocks_localization.0.1.blocks.0.conv',
         'conv_blocks_localization.0.1.blocks.0.instnorm',
-        'conv_blocks_localization.0.1.blocks.0.relu',
+        'conv_blocks_localization.0.1.blocks.0.lrelu',
         'seg_outputs.0',
         'tu.1',
         'conv_blocks_localization.1.0.blocks.0.conv',
         'conv_blocks_localization.1.0.blocks.0.instnorm',
-        'conv_blocks_localization.1.0.blocks.0.relu',
+        'conv_blocks_localization.1.0.blocks.0.lrelu',
         'conv_blocks_localization.1.1.blocks.0.conv',
         'conv_blocks_localization.1.1.blocks.0.instnorm',
-        'conv_blocks_localization.1.1.blocks.0.relu',
+        'conv_blocks_localization.1.1.blocks.0.lrelu',
         'seg_outputs.1',
         'tu.2',
         'conv_blocks_localization.2.0.blocks.0.conv',
         'conv_blocks_localization.2.0.blocks.0.instnorm',
-        'conv_blocks_localization.2.0.blocks.0.relu',
+        'conv_blocks_localization.2.0.blocks.0.lrelu',
         'conv_blocks_localization.2.1.blocks.0.conv',
         'conv_blocks_localization.2.1.blocks.0.instnorm',
-        'conv_blocks_localization.2.1.blocks.0.relu',
+        'conv_blocks_localization.2.1.blocks.0.lrelu',
         'seg_outputs.2',
         'tu.3',
         'conv_blocks_localization.3.0.blocks.0.conv',
         'conv_blocks_localization.3.0.blocks.0.instnorm',
-        'conv_blocks_localization.3.0.blocks.0.relu',
+        'conv_blocks_localization.3.0.blocks.0.lrelu',
         'conv_blocks_localization.3.1.blocks.0.conv',
         'conv_blocks_localization.3.1.blocks.0.instnorm',
-        'conv_blocks_localization.3.1.blocks.0.relu',
+        'conv_blocks_localization.3.1.blocks.0.lrelu',
         'seg_outputs.3',
     ]
 
@@ -89,15 +89,15 @@ def get_previous_layer(layer_name):
 
 def get_activations_input(layer_name, activations_dict):
     layer_pre = get_previous_layer(layer_name)
-    data = get_activations_output(layer_pre, activations_dict)
+    data = activations_dict[layer_pre]
     if layer_pre.startswith('tu.'):
         d = int(layer_pre.replace('tu.', ''))
-        conv_blocks_context = get_activations_output('conv_blocks_context.{}.blocks.1.instnorm'.format(3-d), activations_dict)
+        conv_blocks_context = activations_dict['conv_blocks_context.{}.blocks.1.lrelu'.format(3-d)]
         return torch.cat((data, conv_blocks_context), axis=1)
     return data
 
 def get_activations_output(layer_name, activations_dict):
-    if layer_name.endswith('.relu'):
+    if layer_name.endswith('.lrelu'):
         data = get_activations_input(layer_name, activations_dict)
         return torch.where(data > 0, data, data * 0.01)
     return activations_dict.get(layer_name, None)
@@ -195,6 +195,46 @@ def generate_predictions_ram(trainer, dataset_keys=None, activations_extractor_k
         # all_in_gpu=False
     )
 
+def extract_central_patch(trainer, data, batches_per_scan=64):
+    data_size = np.array(data.shape[2:4])
+    patch_size = np.array(trainer.patch_size)
+    start = (data_size // 2 - np.array(trainer.patch_size) // 2).clip(np.array([0, 0]), data_size)
+    end = (start + patch_size).clip(np.array([0, 0]), data_size)
+    batches = np.linspace(0, data.shape[1] - 1, batches_per_scan).astype(int)
+    return data[:, batches, start[0] : end[0], start[1] : end[1]]
+
+def apply_prediction_data_filter_monkey_patch(trainer, batches_per_scan=64):
+    predict_original = trainer.predict_preprocessed_data_return_seg_and_softmax
+    def predict_patched(*args, **kwargs):
+        # extract patch here to only get one patch in feature extraction per slice
+        # => evaluation faster and more consistent
+        data = extract_central_patch(trainer, args[0], batches_per_scan=batches_per_scan)
+        return predict_original(data, *args[1:], **kwargs)
+    trainer.predict_preprocessed_data_return_seg_and_softmax = predict_patched
+    return predict_original
+
+def activations_dict_to_cpu(activations_dict):
+    return dict(map(
+        lambda kv: (kv[0], kv[1].cpu()),
+        activations_dict.items()
+    ))
+
+def get_activations_dicts_merged(activations_dicts):
+    activations_dict_concat = dict()
+    for activations_dict in activations_dicts:
+        for key, value in activations_dict.items():
+            activations_dict_concat.setdefault(key, []).extend(
+                value
+            )
+    
+    return dict(map(
+        lambda item: (
+            item[0],
+            torch.stack(item[1])
+        ),
+        activations_dict_concat.items()
+    ))
+
 
 def get_scores(task, trainer, fold_train, epoch, **kwargs):
     directory_testout = get_testdata_dir(task, trainer, fold_train, epoch, **kwargs)
@@ -207,17 +247,17 @@ def get_scores(task, trainer, fold_train, epoch, **kwargs):
     scores['fold_train'] = fold_train
     scores['fold'] = scores['tomograph_model'].str.cat(scores['tesla_value'].astype(str))
     scores.rename(columns={ 'fold': 'fold_test' }, inplace=True)
-    val_set = set(map(
-        get_id_from_filename,
-        sum(
-            map(
-                lambda x: x['val'],
-                load_split_all(task)
-            ),
-            []
-        )
+    
+    splits_all = load_split_all(task)
+    id_idlong_map = dict(map(
+        lambda x: (get_id_from_filename(x), x),
+        sum(map(lambda x: x['train'] + x['val'], splits_all), [])
     ))
-    scores['is_validation'] = scores['id'].apply(lambda x: x in val_set)
+    scores['id_long'] = scores['id'].apply(lambda x: id_idlong_map.get(x, None))
+
+    val_set = set(sum(map(lambda x: x['val'], splits_all), []))
+    scores['is_validation'] = scores['id_long'].apply(lambda x: x in val_set)
+    
     scores['iou_score'] = scores['dice_score'].apply(dice_to_iou)
     return scores
 

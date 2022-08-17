@@ -33,24 +33,7 @@ def get_async_store_queue(output_directory_base, store_fn=store_data, num_thread
 
 
 
-def extract_central_patch(trainer, data):
-    num_batches = 64
-    patch_size = np.array(trainer.patch_size)
-    patch_size_halfed = np.array(trainer.patch_size) // 2
-    start = np.array(data.shape[2:4]) // patch_size_halfed * patch_size_halfed
-    end = start + patch_size
-    batches = np.linspace(0, data.shape[1]-1, num_batches).astype(int)
-    return data[:, batches, start[0] : end[0], start[1] : end[1]]
 
-def apply_prediction_data_filter_monkey_patch(trainer):
-    predict_original = trainer.predict_preprocessed_data_return_seg_and_softmax
-    def predict_patched(*args, **kwargs):
-        # extract patch here to only get one patch in feature extraction per slice
-        # => evaluation faster and more consistent
-        data = extract_central_patch(trainer, args[0])
-        return predict_original(data, *args[1:], **kwargs)
-    trainer.predict_preprocessed_data_return_seg_and_softmax = predict_patched
-    return predict_original
 
 
 def get_tensor_memsize_estimate(t):
@@ -144,7 +127,7 @@ def extract_featurewise_scalar_measurements(
     for trainer, fold, epoch in itertools.product(trainers, folds, epochs):
         tmodel = hlp.load_model(trainer, fold, epoch)
         
-        apply_prediction_data_filter_monkey_patch(tmodel)
+        hlp.apply_prediction_data_filter_monkey_patch(tmodel, batches_per_scan=64)
 
         for id, prediction, activations_dict in hlp.generate_predictions_ram(
             trainer=tmodel,
