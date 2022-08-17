@@ -98,6 +98,70 @@ def compute_confidence(mixtures_src, pt_src_transformed, pt_dst_transformed):
     score_weight = np.linalg.norm(pt_dst_transformed, axis=1)
     return scores, score_weight
 
+def train_roughness_and_confidence(data_src, data_src_gt, data_dst, data_dst_gt, kernel_size, stride, max_samples, pca_components=0.8, kmeans_components=5):
+    data_src = data_src.movedim(1, -1).numpy()
+    data_src_gt = data_src_gt.movedim(1, -1).numpy()
+    data_dst = data_dst.movedim(1, -1).numpy()
+    data_dst_gt = data_dst_gt.movedim(1, -1).numpy()
+
+    pt_src, pt_src_gt, pt_dst_pred, pt_dst_gt = align_and_subsample(
+        data_src,
+        data_src_gt,
+        data_dst,
+        data_dst_gt,
+        MAX_SAMPLES=max_samples,
+        kernel_size=kernel_size,
+        stride=stride
+    )
+    pca_src, kmeans_src, mixtures_src = learn_manifold(
+        pt_src,
+        min(pca_components, pt_src.shape[1]),
+        kmeans_components
+    )
+    pca_dst, kmeans_dst, mixtures_dst = learn_manifold(
+        pt_dst_pred,
+        min(pca_components, pt_dst_pred.shape[1]),
+        kmeans_components
+    )
+    return (
+        (pca_src, kmeans_src, mixtures_src),
+        (pca_dst, kmeans_dst, mixtures_dst)
+    )
+
+def get_roughness_and_confidence(data_src, data_src_gt, data_dst, data_dst_gt, kernel_size, stride, max_samples, pca_src, kmeans_src, mixtures_src, pca_dst, kmeans_dst, mixtures_dst):
+    data_src = data_src.movedim(1, -1).numpy()
+    data_src_gt = data_src_gt.movedim(1, -1).numpy()
+    data_dst = data_dst.movedim(1, -1).numpy()
+    data_dst_gt = data_dst_gt.movedim(1, -1).numpy()
+
+    test_src, test_src_gt, test_dst_pred, test_dst_gt = align_and_subsample(
+        data_src,
+        data_src_gt,
+        data_dst,
+        data_dst_gt,
+        MAX_SAMPLES=max_samples,
+        kernel_size=kernel_size,
+        stride=stride
+    )
+    pt_src_transformed, _, _ = project_manifold(test_src, pca_src, kmeans_src, mixtures_src)
+    pt_dst_transformed, dst_clustidx, _ = project_manifold(test_dst_pred, pca_dst, kmeans_dst, mixtures_dst)
+
+    ## COMPUTE CLUSTERING USING PT_PRED --> This is the roughness metric
+    roughness = sklearn.metrics.davies_bouldin_score(
+        pt_src_transformed,
+        dst_clustidx
+    )
+
+    ## COMPUTE CONFIDENCE -->
+    scores, score_weight = compute_confidence(mixtures_src, pt_src_transformed, pt_dst_transformed)
+    scores_weighted = scores * score_weight
+    confidence = scores.mean()
+    confidence_weighted = scores_weighted.mean()
+
+    return roughness, confidence, confidence_weighted
+
+
+
 
 def get_pca_scores(pca):
     variance_ratio_cumsum = np.cumsum(pca.explained_variance_ratio_)
@@ -116,53 +180,80 @@ def get_pca_scores(pca):
         'variance_ratio_cumsum_kurtosis': hlp.standardized_moment(torch.from_numpy(variance_ratio_cumsum), 4, dim=0).item()
     }
 
+import gc
+def load_data_live(task, trainer, fold, epoch, layers, dataset_keys, batches_per_scan=64):
+    layers_set = set(layers)
+    def is_module_tracked(name, module):
+        return name in layers_set
+
+    def extract_activations_full(name, activations, slices_and_tiles_count, activations_dict):
+        activations_dict.setdefault(name, []).append(activations[0])
+        return activations_dict
+
+    
+    tmodel = hlp.load_model(trainer, fold, epoch)
+    hlp.apply_prediction_data_filter_monkey_patch(tmodel, batches_per_scan=batches_per_scan)
+
+    out = hlp.get_activations_dicts_merged([ hlp.activations_dict_to_cpu(activations_dict) for id, prediction, activations_dict in hlp.generate_predictions_ram(
+        trainer=tmodel,
+        dataset_keys=dataset_keys,
+        activations_extractor_kwargs=dict(
+            extract_activations=extract_activations_full,
+            is_module_tracked=is_module_tracked
+        )
+    )])
+
+    #TODO gc seems to be too slow sometimes
+    del tmodel
+    gc.collect()
+    
+    return out
+
+# TODO could be implemented but live loading only takes a few seconds for 12 scans with 24 batches per scan
+# def load_data_cached(task, trainer, fold, epoch, layers, dataset_keys):
+#     id_path_map = dict(map(
+#         lambda p: (hlp.get_id_from_filename(os.path.basename(p)), p),
+#         glob.iglob(os.path.join(
+#             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
+#             'activations-small-fullmap',
+#             '*_activations.pkl'
+#         ))
+#     ))
+
+    return hlp.get_activations_dicts_merged([ torch.load(
+        id_path_map.get(x),
+        map_location=torch.device('cpu')
+    ) for key in dataset_keys ])
 
 
-def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
-    def get_activations_dicts_merged(activations_paths):
-        activations_dict_concat = dict()
-        for path in activations_paths:
-            activations_dict = torch.load(
-                path,
-                map_location=torch.device('cpu')
-            )
-            for key, value in activations_dict.items():
-                activations_dict_concat.setdefault(key, []).extend(
-                    value
-                )
-        
-        return dict(map(
-            lambda item: (
-                item[0],
-                torch.stack(item[1])
-            ),
-            activations_dict_concat.items()
-        ))
-    def get_roughness_and_confidence_scores(scores):
-        # assert len(fold_train.unique) == 1
-        fold_train = scores['fold_train'].unique()[0]
-        scores_dict = {
-            (fold_test, is_validation): scores[
-                (scores['fold_test'] == fold_test) & (scores['is_validation'] == is_validation)
-            ] for fold_test, is_validation in itertools.product(
-                scores['fold_test'].unique(),
-                scores['is_validation'].unique()
-            )
-        }
-        activations_dict_dict = {
-            key: get_activations_dicts_merged(
-                scores['activations_path'].tolist()
-            ) for key, scores in scores_dict.items()
-        }
-        layers = list(filter(
-            lambda x: '.instnorm' in x or 'tu.' in x or 'seg_outputs.3' in x,
-            hlp.get_layers_ordered()
-        ))
-        for layer_cur in layers:
-            activations_dict_train = activations_dict_dict[(fold_train, 0)]
-            data_src = hlp.get_activations_input(layer_cur.replace('.instnorm', '.conv'), activations_dict_train)
-            data_dst = hlp.get_activations_output(layer_cur, activations_dict_train)
-            data_gt = activations_dict_train['gt']
+def generate_roughness_and_confidence_stats_per_model(task, trainer, fold_train, epoch, scores):
+    # paper/code batchsize 45 (val 5, test 50) volsize [64,64,16] max_samples 80000 => per vol 80000/50 = 1600 patches => 1600/(64*64*16) = 0.024
+    # here batchsize 12 scans with 24 batches volsize [256,192] => 280000 ( > 0.02 * (256*192) * (12*24) ) needed?
+    BATCHES_PER_SCAN=24
+    MAX_SAMPLES=80000
+    PCA_COMPONENTS=10 #0.8 #
+    KMEANS_COMPONENTS=5
+    LAYERS = list(filter(
+        lambda x: '.lrelu' in x or 'tu.' in x or 'seg_outputs.3' in x,
+        hlp.get_layers_ordered()
+    ))
+
+    def load_data(fold, keys):
+        return load_data_live(task, trainer, fold, epoch, LAYERS, keys, batches_per_scan=BATCHES_PER_SCAN)
+
+    def generate_manifolds_per_layer():
+        scores_sub = scores[
+            (scores['fold_test'] == fold_train) & (~scores['is_validation'])
+        ].sort_values('id').head(12)
+        activations_dict = load_data(fold_train, scores_sub['id_long'])
+        data_gt = activations_dict['gt']
+
+        print('train', fold_train)
+        for layer_cur in LAYERS:
+            print(layer_cur)
+            data_src = hlp.get_activations_input(layer_cur.replace('.lrelu', '.conv'), activations_dict)
+            data_dst = activations_dict[layer_cur]
+
             #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
             #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
             data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
@@ -170,130 +261,112 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
 
             layer_config = hlp.get_layer_config(layer_cur)
             
-            kernel_size=layer_config['kernel_size']
-            stride=layer_config['stride']
-            MAX_SAMPLES=6*4*255*195 // 37 # paper code batchsize 45 * volsize [64,64,16] / 80000
+            yield layer_cur, train_roughness_and_confidence(
+                data_src=data_src.float(),
+                data_src_gt=data_src_gt.float(),
+                data_dst=data_dst.float(),
+                data_dst_gt=data_dst_gt.float(),
+                kernel_size=layer_config['kernel_size'],
+                stride=layer_config['stride'],
+                max_samples=MAX_SAMPLES,
+                pca_components=PCA_COMPONENTS,
+                kmeans_components=KMEANS_COMPONENTS
+            )
 
+
+    manifolds_per_layer = dict(generate_manifolds_per_layer())
+
+    for (fold_test, is_validation) in itertools.product(
+            scores['fold_test'].unique(),
+            scores['is_validation'].unique()
+        ):
+        scores_sub = scores[
+            (scores['fold_test'] == fold_test) & (scores['is_validation'] == is_validation)
+        ].sort_values('id').head(12)
+        activations_dict = load_data(fold_test, scores_sub['id_long'])
+
+        print('evaluate', fold_test)
+        for layer_cur, (manifold_src, manifold_dst) in manifolds_per_layer.items():
             print(layer_cur)
+            pca_src, kmeans_src, mixtures_src = manifold_src
+            pca_dst, kmeans_dst, mixtures_dst = manifold_dst
+            
+            data_gt = activations_dict['gt']
+            data_src = hlp.get_activations_input(layer_cur.replace('.lrelu', '.conv'), activations_dict)
+            data_dst = activations_dict[layer_cur]
+            data_gt = activations_dict['gt']
 
-            data_src = data_src.movedim(1, -1).numpy()
-            data_src_gt = data_src_gt.movedim(1, -1).numpy()
-            data_dst = data_dst.movedim(1, -1).numpy()
-            data_dst_gt = data_dst_gt.movedim(1, -1).numpy()
+            #TODO zeros should by used here instead of gt in my opinion
+            #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
+            #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
+            data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
+            data_dst_gt = torch.nn.functional.interpolate(data_gt, data_dst.shape[2:], mode='bilinear').ceil()
+            
+            layer_config = hlp.get_layer_config(layer_cur)
 
-            pt_src, pt_src_gt, pt_dst_pred, pt_dst_gt = align_and_subsample(
-                data_src,
-                data_src_gt,
-                data_dst,
-                data_dst_gt,
-                MAX_SAMPLES=MAX_SAMPLES,
-                kernel_size=kernel_size,
-                stride=stride
+            roughness, confidence, confidence_weighted = get_roughness_and_confidence(
+                data_src=data_src.float(),
+                data_src_gt=data_src_gt.float(),
+                data_dst=data_dst.float(),
+                data_dst_gt=data_dst_gt.float(),
+                kernel_size=layer_config['kernel_size'],
+                stride=layer_config['stride'],
+                max_samples=MAX_SAMPLES * 2,
+                pca_src=pca_src,
+                kmeans_src=kmeans_src,
+                mixtures_src=mixtures_src,
+                pca_dst=pca_dst,
+                kmeans_dst=kmeans_dst,
+                mixtures_dst=mixtures_dst
             )
+            
 
-            PCA_components = 0.8 #10
-            kmeans_components = 5
 
-            pca_src, kmeans_src, mixtures_src = learn_manifold(
-                pt_src,
-                min(PCA_components, pt_src.shape[1]),
-                kmeans_components
-            )
-            pca_dst, kmeans_dst, mixtures_dst = learn_manifold(
-                pt_dst_pred,
-                min(PCA_components, pt_dst_pred.shape[1]),
-                kmeans_components
-            )
-
-            pca_src_scores = { 'pca_src_{}'.format(key): value for key, value in get_pca_scores(pca_src).items() }
-            pca_dst_scores = { 'pca_dst_{}'.format(key): value for key, value in get_pca_scores(pca_dst).items() }
             train_metrics = {
-                **pca_src_scores,
-                **pca_dst_scores,
+                **{ 
+                    'pca_src_{}'.format(key): value for key, value in get_pca_scores(pca_src).items()
+                },
+                **{ 
+                    'pca_dst_{}'.format(key): value for key, value in get_pca_scores(pca_dst).items()
+                },
                 'kmeans_src_inertia': kmeans_src.inertia_,
                 'kmeans_src_n_iter': kmeans_src.n_iter_,
                 'kmeans_dst_inertia': kmeans_dst.inertia_,
                 'kmeans_dst_n_iter': kmeans_dst.n_iter_
             }
+            yield {
+                'fold_test': fold_test,
+                'is_validation': is_validation,
+                'name': layer_cur,
+                'roughness': roughness,
+                'confidence': confidence,
+                'confidence_weighted': confidence_weighted,
+                'iou_score_mean': scores_sub['iou_score'].mean(),
+                'iou_score_std': scores_sub['iou_score'].std(),
+                'dice_score_mean': scores_sub['dice_score'].mean(),
+                'dice_score_std': scores_sub['dice_score'].std(),
+                'sdice_score_mean': scores_sub['sdice_score'].mean(),
+                'sdice_score_std': scores_sub['sdice_score'].std(),
+                **train_metrics
+            }
 
-            for (fold_test, is_validation), activations_dict in activations_dict_dict.items():
-                data_src = hlp.get_activations_input(layer_cur.replace('.instnorm', '.conv'), activations_dict)
-                data_dst = hlp.get_activations_output(layer_cur, activations_dict)
-                data_gt = activations_dict['gt']
-
-                #data_src_gt = torch.zeros_like(data_src[:,:1,:,:])
-                #data_dst_gt = torch.zeros_like(data_dst[:,:1,:,:])
-                data_src_gt = torch.nn.functional.interpolate(data_gt, data_src.shape[2:], mode='bilinear').ceil()
-                data_dst_gt = torch.nn.functional.interpolate(data_gt, data_dst.shape[2:], mode='bilinear').ceil()
-                
-                data_src = data_src.movedim(1, -1).numpy()
-                data_src_gt = data_src_gt.movedim(1, -1).numpy()
-                data_dst = data_dst.movedim(1, -1).numpy()
-                data_dst_gt = data_dst_gt.movedim(1, -1).numpy()
-
-                test_src, test_src_gt, test_dst_pred, test_dst_gt = align_and_subsample(
-                    data_src,
-                    data_src_gt,
-                    data_dst,
-                    data_dst_gt,
-                    MAX_SAMPLES=MAX_SAMPLES*2,
-                    kernel_size=kernel_size,
-                    stride=stride
-                )
-                pt_src_transformed, _, _ = project_manifold(test_src, pca_src, kmeans_src, mixtures_src)
-                pt_dst_transformed, dst_clustidx, _ = project_manifold(test_dst_pred, pca_dst, kmeans_dst, mixtures_dst)
-
-                ## COMPUTE CLUSTERING USING PT_PRED --> This is the roughness metric
-                db_roughness = sklearn.metrics.davies_bouldin_score(
-                    pt_src_transformed,
-                    dst_clustidx
-                )
-
-                ## COMPUTE CONFIDENCE -->
-                scores, score_weight = compute_confidence(mixtures_src, pt_src_transformed, pt_dst_transformed)
-                wscores = scores * score_weight
-                conf = scores.mean()
-                wconf = wscores.mean()
-                scores_sub = scores_dict[(fold_test, is_validation)]
-                yield {
-                    'fold_test': fold_test,
-                    'is_validation': is_validation,
-                    'name': layer_cur,
-                    'roughness': db_roughness,
-                    'confidence': conf,
-                    'confidence_weighted': wconf,
-                    'iou_score_mean': scores_sub['iou_score'].mean(),
-                    'iou_score_std': scores_sub['iou_score'].std(),
-                    'dice_score_mean': scores_sub['dice_score'].mean(),
-                    'dice_score_std': scores_sub['dice_score'].std(),
-                    'sdice_score_mean': scores_sub['sdice_score'].mean(),
-                    'sdice_score_std': scores_sub['sdice_score'].std(),
-                    **train_metrics
-                }
-
+def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
     output_dir = 'data/csv/activations-roughness-and-confidence'
     os.makedirs(output_dir, exist_ok=True)
 
     for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
         print(task, trainer, fold_train, epoch)
-
-        id_path_map = dict(map(
-            lambda p: (hlp.get_id_from_filename(os.path.basename(p)), p),
-            glob.iglob(os.path.join(
-                hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-                'activations-small-fullmap',
-                '*_activations.pkl'
-            ))
-        ))
         
         scores = hlp.get_scores(task, trainer, fold_train, epoch)
-
-        scores = scores[scores['id'].isin(set(id_path_map.keys()))]
-        scores['activations_path'] = scores['id'].apply(lambda x: id_path_map.get(x))
-        #scores = scores.sort_values('id')
         
         stats = pd.DataFrame(
-            get_roughness_and_confidence_scores(scores)
+            generate_roughness_and_confidence_stats_per_model(
+                task,
+                trainer,
+                fold_train,
+                epoch,
+                scores
+            )
         )
         stats['trainer'] = trainer
         stats['fold_train'] = fold_train
@@ -303,7 +376,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             os.path.join(
                 output_dir,
                 'activations-roughness-and-confidence-grouped-relu-and-residual{}-{}-{}-{}.csv'.format(
-                    '-pca80p-gt',#'',
+                    '-pca10c-gt-s12-b24',#'',
                     trainer,
                     fold_train,
                     epoch
@@ -332,8 +405,8 @@ def plot_roughness_and_confidence_grouped():
     ])
     stats_weights['name'] = stats_weights['name'].str.replace('.weight', '')
     # take .conv weights if instancenorm was last layer
-    stats_weights = stats_weights[~stats_weights['name'].str.endswith('.instnorm')]
-    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.instnorm')
+    stats_weights = stats_weights[~stats_weights['name'].str.endswith('.lrelu')]
+    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.lrelu')
     stats_weights = stats_weights[['trainer', 'fold_train', 'epoch', 'name', 'norm_frob', 'norm_spectral']]
 
     # TODO
@@ -552,7 +625,7 @@ epochs = [10,20,30,40,80,120]
 
 
 calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
-plot_roughness_and_confidence_grouped()
+#plot_roughness_and_confidence_grouped()
 
 
 #TODO paper uses 4 differnt losses and store after each of 32 epochs => 128 models
