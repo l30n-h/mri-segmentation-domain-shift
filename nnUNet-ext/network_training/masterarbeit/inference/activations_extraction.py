@@ -1,17 +1,6 @@
 import torch
 import os
 
-
-def dict_map(apply_fn, dct):
-    return dict(map(
-        lambda item: (
-            item[0],
-            apply_fn(item[1])
-        ),
-        dct.items()
-    ))
-
-
 def is_module_parametrized(module):
     ps = list(module.named_parameters(recurse=False))
     return len(ps) > 0
@@ -39,26 +28,35 @@ def extract_activations_full(name, activations, slices_and_tiles_count, activati
     return activations_dict
 
 
+def create_activations_extractor_from_env():
+    if os.getenv('MA_USE_TEST_HOOKS', 'FALSE').lower() != 'true':
+        return activations_extractor_dummy()
+    return activations_extractor(
+        extract_activations=extract_activations_full,
+        is_module_tracked=is_module_tracked,
+        merge_activations_dict=get_activations_dict_fs_friendly
+    )
+
 def reduce_batchsize_to_4(activations):
     #TODO heuristic to choose 4 slices/tiles that are mostly centered
     start = 1 if activations.shape[0] > 4 else 0
     step = activations.shape[0] // 4
     return activations[start::step].clone()
 
-
-def create_activations_extractor_from_env():
-    if os.getenv('MA_USE_TEST_HOOKS', 'FALSE').lower() != 'true':
-        return activations_extractor_dummy()
-    return activations_extractor()
+def get_activations_dict_fs_friendly(activations_dict):
+    return dict(map(
+        lambda item: (
+            item[0],
+            reduce_batchsize_to_4(
+                torch.stack(item[1])
+            ).cpu()
+        ),
+        dct.items()
+    ))
 
 def save_activations_dict(activations_dict, output_filename):
     if os.getenv('MA_USE_TEST_HOOKS', 'FALSE').lower() != 'true':
         return
-    
-    activations_dict = dict_map(
-        reduce_batchsize_to_4,
-        activations_dict
-    )
 
     output_dir = os.path.join(
         os.path.dirname(output_filename),
@@ -73,12 +71,18 @@ def save_activations_dict(activations_dict, output_filename):
 
 
 class activations_extractor():
-    def __init__(self, extract_activations=extract_activations_full, is_module_tracked=is_module_tracked):
+    def __init__(
+        self,
+        extract_activations=extract_activations_full,
+        is_module_tracked=is_module_tracked,
+        merge_activations_dict=lambda x: x
+    ):
         self.hooks = {}
         self.activations_dict = {}
         self.slices_and_tiles_count = -1
         self.extract_activations = extract_activations
         self.is_module_tracked = is_module_tracked
+        self.merge_activations_dict = merge_activations_dict
 
     def __del__(self):
         self.reset_activations_dict()
@@ -89,10 +93,7 @@ class activations_extractor():
         self.slices_and_tiles_count = -1
 
     def get_activations_dict(self):
-        return dict_map(
-            lambda x: torch.stack(x),
-            self.activations_dict
-        )
+        return self.merge_activations_dict(self.activations_dict)
     
     def is_active(self):
         return len(self.hooks)

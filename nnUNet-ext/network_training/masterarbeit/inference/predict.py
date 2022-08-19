@@ -226,10 +226,7 @@ def predict_cases(model, list_of_lists, output_filenames, folds, save_npz, num_t
             step_size=step_size, use_gaussian=True, all_in_gpu=all_in_gpu,
             mixed_precision=mixed_precision)[1]
 
-        activations_dict = act_ext.dict_map(
-            lambda x: x.cpu(),
-            activations_extractor.get_activations_dict()
-        )
+        activations_dict = activations_extractor.get_activations_dict()
 
         for p in params[1:]:
             trainer.load_checkpoint_ram(p, False)
@@ -241,10 +238,7 @@ def predict_cases(model, list_of_lists, output_filenames, folds, save_npz, num_t
                 step_size=step_size, use_gaussian=True, all_in_gpu=all_in_gpu,
                 mixed_precision=mixed_precision)[1]
             
-            activations_dict2 = act_ext.dict_map(
-                lambda x: x.cpu(),
-                activations_extractor.get_activations_dict()
-            )
+            activations_dict2 = activations_extractor.get_activations_dict()
 
             activations_dict = dict(map(
                 lambda key: (key, activations_dict[key] + activations_dict2[key]),

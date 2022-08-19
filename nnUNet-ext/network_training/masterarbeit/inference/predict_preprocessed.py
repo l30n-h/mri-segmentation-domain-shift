@@ -183,10 +183,6 @@ def predict_preprocessed_fs(
                 )
             )
 
-            activations_dict = act_ext.dict_map(
-                lambda x: x.cpu(),
-                activations_dict
-            )
             results.append(export_pool.apply_async(
                 act_ext.save_activations_dict, (
                     activations_dict,
