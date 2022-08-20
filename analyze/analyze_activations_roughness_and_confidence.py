@@ -147,10 +147,15 @@ def get_roughness_and_confidence(data_src, data_src_gt, data_dst, data_dst_gt, k
     pt_dst_transformed, dst_clustidx, _ = project_manifold(test_dst_pred, pca_dst, kmeans_dst, mixtures_dst)
 
     ## COMPUTE CLUSTERING USING PT_PRED --> This is the roughness metric
-    roughness = sklearn.metrics.davies_bouldin_score(
-        pt_src_transformed,
-        dst_clustidx
-    )
+    try:
+        roughness = sklearn.metrics.davies_bouldin_score(
+            pt_src_transformed,
+            dst_clustidx
+        )
+    except ValueError as e:
+        # happens if dst_clustidx has only one unique value
+        print(e)
+        roughness = 0
 
     ## COMPUTE CONFIDENCE -->
     scores, score_weight = compute_confidence(mixtures_src, pt_src_transformed, pt_dst_transformed)
@@ -181,25 +186,34 @@ def get_pca_scores(pca):
     }
 
 import gc
-def load_data_live(task, trainer, fold, epoch, layers, dataset_keys, batches_per_scan=64):
+def load_data_live(task, trainer, fold_train, epoch, layers, dataset_keys, batches_per_scan=64):
     layers_set = set(layers)
     def is_module_tracked(name, module):
         return name in layers_set
 
     def extract_activations_full(name, activations, slices_and_tiles_count, activations_dict):
-        activations_dict.setdefault(name, []).append(activations[0])
+        activations_dict.setdefault(name, []).append(activations[0].clone())
         return activations_dict
 
-    
-    tmodel = hlp.load_model(trainer, fold, epoch)
+    def merge_activations_dict(activations_dict):
+        return dict(map(
+            lambda item: (
+                item[0],
+                torch.stack(item[1]).cpu()
+            ),
+            activations_dict.items()
+        ))
+
+    tmodel = hlp.load_model(trainer, fold_train, epoch)
     hlp.apply_prediction_data_filter_monkey_patch(tmodel, batches_per_scan=batches_per_scan)
 
-    out = hlp.get_activations_dicts_merged([ hlp.activations_dict_to_cpu(activations_dict) for id, prediction, activations_dict in hlp.generate_predictions_ram(
+    out = hlp.get_activations_dicts_merged([ activations_dict for id, prediction, activations_dict in hlp.generate_predictions_ram(
         trainer=tmodel,
         dataset_keys=dataset_keys,
         activations_extractor_kwargs=dict(
             extract_activations=extract_activations_full,
-            is_module_tracked=is_module_tracked
+            is_module_tracked=is_module_tracked,
+            merge_activations_dict=merge_activations_dict
         )
     )])
 
@@ -209,26 +223,12 @@ def load_data_live(task, trainer, fold, epoch, layers, dataset_keys, batches_per
     
     return out
 
-# TODO could be implemented but live loading only takes a few seconds for 12 scans with 24 batches per scan
-# def load_data_cached(task, trainer, fold, epoch, layers, dataset_keys):
-#     id_path_map = dict(map(
-#         lambda p: (hlp.get_id_from_filename(os.path.basename(p)), p),
-#         glob.iglob(os.path.join(
-#             hlp.get_testdata_dir(task, trainer, fold_train, epoch),
-#             'activations-small-fullmap',
-#             '*_activations.pkl'
-#         ))
-#     ))
-
-    return hlp.get_activations_dicts_merged([ torch.load(
-        id_path_map.get(x),
-        map_location=torch.device('cpu')
-    ) for key in dataset_keys ])
 
 
 def generate_roughness_and_confidence_stats_per_model(task, trainer, fold_train, epoch, scores):
     # paper/code batchsize 45 (val 5, test 50) volsize [64,64,16] max_samples 80000 => per vol 80000/50 = 1600 patches => 1600/(64*64*16) = 0.024
     # here batchsize 12 scans with 24 batches volsize [256,192] => 280000 ( > 0.02 * (256*192) * (12*24) ) needed?
+    SCANS_PER_FOLD=12
     BATCHES_PER_SCAN=24
     MAX_SAMPLES=80000
     PCA_COMPONENTS=10 #0.8 #
@@ -238,14 +238,14 @@ def generate_roughness_and_confidence_stats_per_model(task, trainer, fold_train,
         hlp.get_layers_ordered()
     ))
 
-    def load_data(fold, keys):
-        return load_data_live(task, trainer, fold, epoch, LAYERS, keys, batches_per_scan=BATCHES_PER_SCAN)
+    def load_data(keys):
+        return load_data_live(task, trainer, fold_train, epoch, LAYERS, keys, batches_per_scan=BATCHES_PER_SCAN)
 
     def generate_manifolds_per_layer():
         scores_sub = scores[
             (scores['fold_test'] == fold_train) & (~scores['is_validation'])
-        ].sort_values('id').head(12)
-        activations_dict = load_data(fold_train, scores_sub['id_long'])
+        ].sort_values('id').head(SCANS_PER_FOLD)
+        activations_dict = load_data(scores_sub['id_long'])
         data_gt = activations_dict['gt']
 
         print('train', fold_train)
@@ -282,8 +282,8 @@ def generate_roughness_and_confidence_stats_per_model(task, trainer, fold_train,
         ):
         scores_sub = scores[
             (scores['fold_test'] == fold_test) & (scores['is_validation'] == is_validation)
-        ].sort_values('id').head(12)
-        activations_dict = load_data(fold_test, scores_sub['id_long'])
+        ].sort_values('id').head(SCANS_PER_FOLD)
+        activations_dict = load_data(scores_sub['id_long'])
 
         print('evaluate', fold_test)
         for layer_cur, (manifold_src, manifold_dst) in manifolds_per_layer.items():
@@ -387,7 +387,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
 
 def plot_roughness_and_confidence_grouped():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca80p-gt-*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s12-b24*.csv', recursive=False)
     ])
     stats.rename(
         columns={
@@ -625,13 +625,18 @@ epochs = [10,20,30,40,80,120]
 
 
 calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
-#plot_roughness_and_confidence_grouped()
+plot_roughness_and_confidence_grouped()
 
 
 #TODO paper uses 4 differnt losses and store after each of 32 epochs => 128 models
 #     here 2 different optimizer 2 epochs 4 train folds => 16 models each with 2 * 6 test folds => 192 data points
 #TODO paper uses 198 "label-free" testing exams
 #     here 12 (scans per fold) * 4 (slices) => 48 testing exams
+#  but how can they use 198 testing exams???
+#  they use a dataset of 973 3D mri scans
+#  split 80% training 20% test
+#  => max number of test exams = 0.2 * 973 = 194.6!!!
+#  patches???
 #TODO paper uses mask in test data to sample well distributed samples. Still label free??
 #TODO which layers to consider?
 #     model 600 referenced in paper seems to define a layer as conv-norm-relu...
@@ -640,5 +645,4 @@ calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
 #     at least its lower for adam than for sgd
 #     its lower for 120 epochs for SGD and higher for 120 epochs for Adam
 #     its slightly lower for both if DA is used (execept sgd ge3)
-
 #TODO check for seg_output shift
