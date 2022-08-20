@@ -2,8 +2,87 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import itertools
 import os
+import json
+import re
+import io
 
 import helpers as hlp
+
+
+
+def load_json(path):
+    with open(path) as f:
+        return json.load(f)
+
+def get_summary_scores(task, trainer, fold, epoch):
+    try:
+        data = load_json(
+            os.path.join(
+                hlp.get_testdata_dir(task, trainer, fold, epoch),
+                'summary-small.json'
+            )
+        )
+        def extract(data):
+            # available_fields = [
+            #     "Accuracy",
+            #     "Dice",
+            #     "False Discovery Rate",
+            #     "False Negative Rate",
+            #     "False Omission Rate",
+            #     "False Positive Rate",
+            #     "Jaccard",
+            #     "Negative Predictive Value",
+            #     "Precision",
+            #     "Recall",
+            #     "Total Positives Reference",
+            #     "Total Positives Test",
+            #     "True Negative Rate",
+            # ]
+            return {
+                'id': re.search(r"/(CC\d{4})_", data['reference']).groups(1)[0],
+                'trainer': trainer,
+                'fold_train': fold,
+                'epoch': epoch,
+                **data['1']
+            }
+        return pd.read_json(
+            io.StringIO(json.dumps(list(map(extract, data['results']['all']))))
+        )
+    except FileNotFoundError:
+        return pd.DataFrame()
+
+def compare_score(task, trainers, folds, epochs):
+    scores_summary = pd.concat([ 
+        get_summary_scores(
+            task, trainer, fold, epoch
+        ) for trainer, fold, epoch in itertools.product(trainers, folds, epochs)
+    ])
+    scores = pd.concat([
+        hlp.get_scores(
+            task, trainer, fold, epoch
+        ) for trainer, fold, epoch in itertools.product(trainers, folds, epochs)
+    ])
+
+    join_on=['trainer', 'fold_train', 'epoch', 'id']
+    joined = scores_summary.join(scores.set_index(join_on), on=join_on)[
+        join_on + [
+            'Dice',
+            'dice_score',
+            'sdice_score',
+            'Jaccard',
+            'iou_score'
+        ]
+    ]
+    dif_dice = joined['Dice'] - joined['dice_score']
+    dif_iou = joined['Jaccard'] - joined['iou_score']
+    print(dif_dice.min())
+    print(dif_dice.mean())
+    print(dif_dice.abs().mean())
+    print(dif_dice.max())
+    print(dif_iou.min())
+    print(dif_iou.mean())
+    print(dif_iou.abs().mean())
+    print(dif_iou.max())
 
 def plot_scores(task, trainers, folds, epochs):
     scores = pd.concat([
@@ -159,4 +238,5 @@ folds = [
 ]
 epochs = [10,20,30,40,80,120]
 
+#compare_score(task, trainers, folds, epochs)
 plot_scores(task, trainers, folds, epochs)
