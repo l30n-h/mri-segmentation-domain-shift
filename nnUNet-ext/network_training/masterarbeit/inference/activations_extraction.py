@@ -51,7 +51,7 @@ def get_activations_dict_fs_friendly(activations_dict):
                 torch.stack(item[1])
             ).cpu()
         ),
-        dct.items()
+        activations_dict.items()
     ))
 
 def save_activations_dict(activations_dict, output_filename):

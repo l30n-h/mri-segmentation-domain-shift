@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import torch
+from multiprocessing import Pool
 from functools import lru_cache
 from nnunet.training.model_restore import load_model_and_checkpoint_files
 from nnunet.training.network_training.masterarbeit.inference.predict_preprocessed import predict_preprocessed_ram
@@ -168,9 +169,9 @@ def get_testdata_dir(task, trainer, fold_train, epoch, folder_test='archive/old/
 
 
 
-def load_model(trainer, fold, epoch, folder_train='archive/old/nnUNet-container/data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training', eval=True, use_test_hooks=True, test_include_gt=True):
+def load_model(trainer, fold, epoch, models_base_dir='archive/old/nnUNet-container/data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training', eval=True):
     tmodel, params = load_model_and_checkpoint_files(
-        os.path.join(folder_train, trainer),
+        os.path.join(models_base_dir, trainer),
         get_fold_id_mapping()[fold],
         mixed_precision=True,
         checkpoint_name='model_ep_{:0>3}'.format(epoch)
@@ -213,11 +214,6 @@ def apply_prediction_data_filter_monkey_patch(trainer, batches_per_scan=64):
     trainer.predict_preprocessed_data_return_seg_and_softmax = predict_patched
     return predict_original
 
-def activations_dict_to_cpu(activations_dict):
-    return dict(map(
-        lambda kv: (kv[0], kv[1].cpu()),
-        activations_dict.items()
-    ))
 
 def get_activations_dicts_merged(activations_dicts):
     activations_dict_concat = dict()
@@ -234,6 +230,24 @@ def get_activations_dicts_merged(activations_dicts):
         ),
         activations_dict_concat.items()
     ))
+
+def get_async_queue(num_threads=8):
+    results = []
+    pool = Pool(num_threads)
+    def add_async_task(async_fn, *args, **kwargs):
+        results.append(pool.apply_async(
+            async_fn, args, kwargs
+        ))
+
+    def join_async_tasks():
+        return [i.get() for i in results]
+    return add_async_task, join_async_tasks
+
+def get_tensor_memsize_estimate(t):
+    return t.nelement() * t.element_size()
+
+def get_activations_dict_memsize_estimate(activations_dict):
+    return sum(map(get_tensor_memsize_estimate, activations_dict.values()))
 
 
 def get_scores(task, trainer, fold_train, epoch, **kwargs):
