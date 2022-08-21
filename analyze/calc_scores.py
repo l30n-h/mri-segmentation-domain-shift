@@ -107,6 +107,7 @@ meta = pd.read_csv(dataset_meta_path)
 for predictions_base_path in glob.iglob(predictions_base_path_glob, recursive=False):
     print(predictions_base_path)
     output_path = os.path.join(predictions_base_path, 'scores.csv')
+    predictions_base_path = os.path.join(predictions_base_path, 'prediction_raw')
     if not overwrite and os.path.exists(output_path):
         print('already exists. skipped...')
         continue
@@ -121,6 +122,6 @@ for predictions_base_path in glob.iglob(predictions_base_path_glob, recursive=Fa
     if only_full_datasets and len(ids_available) < len(meta.index):
         print('prediction not finished. skipped...')
         continue
-    meta = meta[meta['id'].isin(ids)]
+    meta = meta[meta['id'].isin(ids_available)]
 
     calc_scores(meta.copy(), predictions_base_path, output_path)
