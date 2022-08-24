@@ -15,7 +15,8 @@ RUN python3 -m pip install --upgrade pip && python3 -m pip install \
     # insert your requirements here
     numpy \
     jupyterlab \
-    matplotlib
+    matplotlib \
+    seaborn
 
 # When the container runs jupyter lab, it is served to localhost at port 8888 by default. When you want to run multiple instances of this container, or the port 8888 ist blocked, provide an alternative port as a build-arg, when building the container image.
 
