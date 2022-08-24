@@ -32,6 +32,7 @@ class nnUNetTrainerV2_MA(nnUNetTrainerV2):
         self.loss = MultipleOutputLoss2(self.loss, self.ds_loss_weights)
     
     def get_tr_and_val_gen(self):
+        print('with more augmentation generators')
         tr_gen, val_gen = get_moreDA_augmentation(
             self.dl_tr, self.dl_val,
             self.data_aug_params[

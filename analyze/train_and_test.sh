@@ -15,6 +15,10 @@ trainers=(
   #"${trainer_base}_SGD_ep120_nomirror"
   #"${trainer_base}_SGD_ep120_norotation"
   #"${trainer_base}_SGD_ep120_noscaling"
+  # "${trainer_base}_bn_ep120"
+  # "${trainer_base}_bn_ep120_noDA"
+  # "${trainer_base}_bn_SGD_ep120"
+  # "${trainer_base}_bn_SGD_ep120_noDA"
 )
 declare -A fold_id_mapping
 fold_id_mapping['siemens15']=0
