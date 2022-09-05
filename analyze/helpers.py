@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import torch
+import re
 from multiprocessing import Pool
 from functools import lru_cache
 from nnunet.training.model_restore import load_model_and_checkpoint_files
@@ -125,10 +126,12 @@ def get_layer_config(layer_name):
     
 
 def get_trainer_short(x):
-    return '{}_wd={}_DA={}'.format(
+    DA = re.search(r'_(noDA|nogamma|nomirror|norotation|noscaling)', x)
+    return '{}_wd={}_bn={}_DA={}'.format(
         'SGD' if 'SGD' in x else 'Adam',
-        'wd0' not in x,
-        'noDA' not in x
+        '_wd0' not in x,
+        '_bn' in x,
+        'full' if DA is None else DA.group(1).replace('noDA', 'none')
     )
 
 
@@ -273,6 +276,10 @@ def get_scores(task, trainer, fold_train, epoch, **kwargs):
     scores['is_validation'] = scores['id_long'].apply(lambda x: x in val_set)
     
     scores['iou_score'] = scores['dice_score'].apply(dice_to_iou)
+    scores['optimizer'] = scores['trainer'].str.replace(r'^.*?(SGD|$).*$', lambda m: m.group(1) or 'Adam', n=1, regex=True)
+    scores['wd'] = ~scores['trainer'].str.contains('wd0')
+    scores['DA'] = scores['trainer'].str.replace(r'^.*?(noDA|nogamma|nomirror|norotation|noscaling|$).*$', lambda m: m.group(1) or 'full', n=1, regex=True).str.replace('noDA', 'none')
+    scores['bn'] = scores['trainer'].str.contains('_bn')
     return scores
 
 def load_domainshift_scores(task, trainer, fold_train, epoch):
@@ -304,6 +311,21 @@ def load_domainshift_scores(task, trainer, fold_train, epoch):
     })
 
 
+import seaborn
+seaborn.set_style('darkgrid')
+def relplot_and_save(outpath, xscale='linear', yscale='linear', *args, **kwargs):
+    print(outpath)
+    g = seaborn.relplot(
+        *args,
+        **kwargs
+    )
+    g.set(xscale=xscale)
+    g.set(yscale=yscale)
+    g.savefig(
+        outpath,
+        bbox_inches='tight',
+        pad_inches=0
+    )
 
 def numerate_nested(df, columns, column_name_out='x'):
     grouped = df[columns].groupby(columns[0:-1])
@@ -497,13 +519,14 @@ def get_moments(name, value, dim=None, keepdim=False):
     # yield '{}_kurtosis_{}'.format(name, dim_str), standardized_moment(value, order=4, dim=dim, keepdim=keepdim)
 
 def get_dims(a):
-    if a.shape[0] > 1 and a.shape[1] > 1:
+    num_dims = len(a.shape)
+    if num_dims > 1 and (a.shape[0] > 1 and a.shape[1] > 1):
         yield (0, 1)
-    if a.shape[0] > 1:
+    if num_dims > 0 and a.shape[0] > 1:
         yield 0
-    if a.shape[1] > 1:
+    if num_dims > 1 and a.shape[1] > 1:
         yield 1
-    if a.shape[2] > 1 or a.shape[3] > 1:
+    if num_dims > 3 and (a.shape[2] > 1 or a.shape[3] > 1):
         yield (2, 3)
 
 def get_moments_recursive(name, value):

@@ -1,5 +1,4 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import itertools
 import os
 import json
@@ -24,22 +23,22 @@ def get_summary_scores(task, trainer, fold, epoch):
         )
         def extract(data):
             # available_fields = [
-            #     "Accuracy",
-            #     "Dice",
-            #     "False Discovery Rate",
-            #     "False Negative Rate",
-            #     "False Omission Rate",
-            #     "False Positive Rate",
-            #     "Jaccard",
-            #     "Negative Predictive Value",
-            #     "Precision",
-            #     "Recall",
-            #     "Total Positives Reference",
-            #     "Total Positives Test",
-            #     "True Negative Rate",
+            #     'Accuracy',
+            #     'Dice',
+            #     'False Discovery Rate',
+            #     'False Negative Rate',
+            #     'False Omission Rate',
+            #     'False Positive Rate',
+            #     'Jaccard',
+            #     'Negative Predictive Value',
+            #     'Precision',
+            #     'Recall',
+            #     'Total Positives Reference',
+            #     'Total Positives Test',
+            #     'True Negative Rate',
             # ]
             return {
-                'id': re.search(r"/(CC\d{4})_", data['reference']).groups(1)[0],
+                'id': re.search(r'/(CC\d{4})_', data['reference']).groups(1)[0],
                 'trainer': trainer,
                 'fold_train': fold,
                 'epoch': epoch,
@@ -56,12 +55,12 @@ def compare_score(task, trainers, folds, epochs):
         get_summary_scores(
             task, trainer, fold, epoch
         ) for trainer, fold, epoch in itertools.product(trainers, folds, epochs)
-    ])
+    ]).reset_index(drop=True)
     scores = pd.concat([
         hlp.get_scores(
             task, trainer, fold, epoch
         ) for trainer, fold, epoch in itertools.product(trainers, folds, epochs)
-    ])
+    ]).reset_index(drop=True)
 
     join_on=['trainer', 'fold_train', 'epoch', 'id']
     joined = scores_summary.join(scores.set_index(join_on), on=join_on)[
@@ -89,132 +88,168 @@ def plot_scores(task, trainers, folds, epochs):
         hlp.get_scores(
             task, trainer, fold, epoch
         ) for trainer, fold, epoch in itertools.product(trainers, folds, epochs)
-    ])
+    ]).reset_index(drop=True)
+
+    scores = scores.groupby(['trainer', 'fold_train', 'epoch', 'fold_test', 'is_validation']).agg(
+        optimizer=('optimizer', 'first'),
+        wd=('wd', 'first'),
+        DA=('DA', 'first'),
+        bn=('bn', 'first'),
+        dice_score_mean=('dice_score', 'mean'),
+        dice_score_std=('dice_score', 'std'),
+        iou_score_mean=('iou_score', 'mean'),
+        iou_score_std=('iou_score', 'std'),
+        sdice_score_mean=('sdice_score', 'mean'),
+        sdice_score_std=('sdice_score', 'std')
+    ).reset_index()
 
     print(scores)
-    scores['trainer_short'] = scores['trainer'].apply(hlp.get_trainer_short)
+    #scores = scores[scores['is_validation']]
+
     
+    scores['wd_bn'] = scores['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + scores['bn'].apply(lambda x: 'bn=' + str(x))
+    scores['wd_DA'] = scores['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + scores['DA']
+    scores['optimizer_wd_DA'] = scores['optimizer'] + ' ' + scores['wd_DA']
+    scores['optimizer_DA'] = scores['optimizer'] + ' ' + scores['DA']
+    scores['wd_bn_DA'] = scores['wd_bn'] + ' ' + scores['DA']
+    scores['same_domain'] = scores['fold_train'] == scores['fold_test']
+    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + scores['is_validation'].apply(lambda x: 'validation' if x else '')
 
-    scores_epoched = scores.groupby(
-        ['trainer_short', 'fold_train', 'fold_test', 'is_validation', 'epoch'],
-    ).agg(
-        iou_score_mean=('iou_score', 'mean'),
-        dice_score_mean=('dice_score', 'mean'),
-        sdice_score_mean=('sdice_score', 'mean'),  
-        iou_score_std=('iou_score', 'std'),
-        dice_score_std=('dice_score', 'std'),
-        sdice_score_std=('sdice_score', 'std'), 
-    ).reset_index()
-    print(scores_epoched)
-    scores_epoched['subplot'] = scores_epoched['trainer_short'] + '_' + scores_epoched['fold_train']
-    scores_epoched['line'] = scores_epoched['fold_test'] + '_' + scores_epoched['is_validation'].map(str)
-    # scores_epoched = scores_epoched.groupby(['subplot', 'line']).agg(
-    #     iou_score_mean=('iou_score_mean', 'first'),
-    #     dice_score_mean=('dice_score_mean', 'first'),
-    #     sdice_score_mean=('sdice_score_mean', 'first'),
-    # )
-    epoched_line_columns = scores_epoched['line'].unique()
-    scores_epoched = scores_epoched.pivot(
-        index=['subplot', 'epoch'],
-        columns=['line']
-    ).reset_index(col_level=1)
-
-
-    scores_epoched_trainer = scores.groupby(
-        ['trainer_short', 'is_validation', 'epoch'],
-    ).agg(
-        iou_score_mean=('iou_score', 'mean'),
-        dice_score_mean=('dice_score', 'mean'),
-        sdice_score_mean=('sdice_score', 'mean'),  
-        iou_score_std=('iou_score', 'std'),
-        dice_score_std=('dice_score', 'std'),
-        sdice_score_std=('sdice_score', 'std'), 
-    ).reset_index()
-    print(scores_epoched_trainer)
-    scores_epoched_trainer['subplot'] = scores_epoched_trainer['trainer_short'].str.replace(r'.*?(Adam|SGD).*', lambda m: m.group(1), regex=True)
-    scores_epoched_trainer['line'] = scores_epoched_trainer['trainer_short'].str.replace(r'(Adam|SGD)_', '', regex=True) + '_' + scores_epoched_trainer['is_validation'].map(str)
-    epoched_trainer_line_columns = scores_epoched_trainer['line'].unique()
-    scores_epoched_trainer = scores_epoched_trainer.pivot(
-        index=['subplot', 'epoch'],
-        columns=['line']
-    ).reset_index(col_level=1)
-
+    print(scores)
 
     output_dir = 'data/fig/scores'
     os.makedirs(output_dir, exist_ok=True)
 
+    
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+
+    aggs = ['mean', 'std']
+    for agg in aggs:
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-scores-{}.png'.format(agg)),
+            data=scores.melt(
+                'dice_score_{}'.format(agg),
+                value_vars=[
+                    'iou_score_{}'.format(agg),
+                    'sdice_score_{}'.format(agg)
+                ],
+                var_name='score_{}'.format(agg),
+                value_name='score_value_{}'.format(agg)
+            ),
+            kind='line',
+            x='dice_score_{}'.format(agg),
+            y='score_value_{}'.format(agg),
+            hue='score_{}'.format(agg),
+            ci=None,
+            height=6,
+            facet_kws=dict(
+                xlim=(0.0, 1.0),
+                ylim=(0.0, 1.0),
+            ),
+        )
+
     columns = [
-        'dice_score_mean',
-        'sdice_score_mean',
-        'iou_score_mean',
-        'dice_score_std',
-        'sdice_score_std',
-        'iou_score_std',
+        'dice_score',
+        'sdice_score',
+        #'iou_score',
     ]
-    for column in columns:
-        print(column)
-        scores_epoched_filtered = scores_epoched[['', column]]
-        scores_epoched_filtered.columns = scores_epoched_filtered.columns.droplevel(0)
-        fig, axes = hlp.create_plot(
-            scores_epoched_filtered,
-            column_x='epoch',
-            column_y=epoched_line_columns,
+    for column, agg in itertools.product(columns, aggs):
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-fold_test-epoch-{}-{}.png'.format(column, agg)),
+            data=scores,
             kind='line',
-            column_subplots='subplot',
-            #column_color='iou_score_mean',
-            #column_color='sdice_score_mean',
-            #colors=stats_epoched_colors,
-            ncols=2,
-            figsize=(42, 24*6),
-            lim_same_x=True,
-            lim_same_y=True,
-            lim_same_c=True,
-            colormap='cool',
-            legend=True,
-            fig_num='activations-roughness-and-confidence',
-            fig_clear=True
+            x='epoch',
+            y='{}_{}'.format(column, agg),
+            row='optimizer',
+            row_order=scores['optimizer'].sort_values().unique(),
+            col='wd_bn_DA',
+            col_order=scores['wd_bn_DA'].sort_values().unique(),
+            hue='fold_test',
+            height=6,
         )
-        fig.savefig(
-            os.path.join(
-                output_dir,
-                'scores-epoch-{}.png'.format(column)
-            ),
-            bbox_inches='tight',
-            pad_inches=0
-        )
-        plt.close(fig)
 
-
-        scores_epoched_trainer_filtered = scores_epoched_trainer[['', column]]
-        scores_epoched_trainer_filtered.columns = scores_epoched_trainer_filtered.columns.droplevel(0)
-        fig, axes = hlp.create_plot(
-            scores_epoched_trainer_filtered,
-            column_x='epoch',
-            column_y=epoched_trainer_line_columns,
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-optimizer-epoch-{}-{}.png'.format(column, agg)),
+            data=scores,
             kind='line',
-            column_subplots='subplot',
-            #column_color='iou_score_mean',
-            #column_color='sdice_score_mean',
-            #colors=stats_epoched_colors,
-            ncols=2,
-            figsize=(42, 24),
-            lim_same_x=True,
-            lim_same_y=True,
-            lim_same_c=True,
-            colormap='cool',
-            legend=True,
-            fig_num='activations-roughness-and-confidence',
-            fig_clear=True
+            x='epoch',
+            y='{}_{}'.format(column, agg),
+            row='wd_bn',
+            row_order=scores['wd_bn'].sort_values().unique(),
+            col='DA',
+            col_order=scores['DA'].sort_values().unique(),
+            hue='optimizer',
+            height=6,
         )
-        fig.savefig(
-            os.path.join(
-                output_dir,
-                'scores-epoch-trainer-{}.png'.format(column)
-            ),
-            bbox_inches='tight',
-            pad_inches=0
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-optimizer-epoch-{}-{}-fold_test.png'.format(column, agg)),
+            data=scores,
+            kind='line',
+            x='epoch',
+            y='{}_{}'.format(column, agg),
+            row='wd_bn',
+            row_order=scores['wd_bn'].sort_values().unique(),
+            col='DA',
+            col_order=scores['DA'].sort_values().unique(),
+            hue='optimizer',
+            style='fold_test',
+            height=6,
         )
-        plt.close(fig)
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-DA-epoch-{}-{}.png'.format(column, agg)),
+            data=scores,
+            kind='line',
+            x='epoch',
+            y='{}_{}'.format(column, agg),
+            row='wd_bn',
+            row_order=scores['wd_bn'].sort_values().unique(),
+            col='optimizer',
+            col_order=scores['optimizer'].sort_values().unique(),
+            hue='DA',
+            height=6,
+        )
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-domain-epoch-{}-{}.png'.format(column, agg)),
+            data=scores,
+            kind='line',
+            x='epoch',
+            y='{}_{}'.format(column, agg),
+            row='wd_bn_DA',
+            row_order=scores['wd_bn_DA'].sort_values().unique(),
+            col='optimizer',
+            col_order=scores['optimizer'].sort_values().unique(),
+            hue='same_domain',
+            style='domain_val',
+            height=6,
+        )
+
+        scores2 = scores[scores['DA'].isin(['full', 'none'])]
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-bn-epoch-{}-{}.png'.format(column, agg)),
+            data=scores2,
+            kind='line',
+            x='epoch',
+            y='{}_{}'.format(column, agg),
+            row='fold_train',
+            row_order=scores2['fold_train'].sort_values().unique(),
+            col='optimizer_DA',
+            col_order=scores2['optimizer_DA'].sort_values().unique(),
+            hue='wd_bn',
+            style='domain_val',
+            height=6,
+        )
+
+    join_async_tasks()
 
 
 task = 'Task601_cc359_all_training'
@@ -223,10 +258,24 @@ trainers = [
     'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
+
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling',
+
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',

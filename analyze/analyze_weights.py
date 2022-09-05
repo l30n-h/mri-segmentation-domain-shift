@@ -1,11 +1,9 @@
-from nnunet.training.model_restore import load_model_and_checkpoint_files
 import numpy as np
 import torch
 import pandas as pd
 import itertools
 import os
 import sys
-import matplotlib.pyplot as plt
 import glob
 
 import helpers as hlp
@@ -49,10 +47,10 @@ def get_toeplitz(kernel_flat):
 
 
 def generate_stats_weights(parameters):
-    for name, features in parameters.items():
+    def get_stats(features):
         # for conv [out_ch, in_ch, k_h, k_w]
-        if len(features.shape) == 0:
-            continue
+        if features is None or len(features.shape) == 0:
+            return {}
         
         if len(features.shape) < 4:
             features = features[(...,)+(None,)*(4-len(features.shape))]
@@ -105,25 +103,34 @@ def generate_stats_weights(parameters):
 
         features_base = {
             'features': features,
-            'features_noise': features_noise[..., None, None],
-            'features_zero': diagonal_zero[None, None, None, None],
-            'features_norm': features_flat_norm[..., None, None],
-            'similarity_di_abs': diagonal.abs()[..., None, None, None],
-            'similarity_co_abs': coocurence.abs()[..., None, None, None],
-            'features2_zero': diagonals2_zero[..., None, None, None],
-            'features2_norm': features_flat2_norm[..., None],
-            'similarity2_di_abs': diagonals2.abs()[..., None, None],
-            'similarity2_co_abs': coocurences2.abs()[..., None, None],
+            'features_noise': features_noise,
+            'features_zero': diagonal_zero[None],
+            'features_norm': features_flat_norm,
+            'similarity_di_abs': diagonal.abs(),
+            'similarity_co_abs': coocurence.abs(),
+            'features2_zero': diagonals2_zero,
+            'features2_norm': features_flat2_norm,
+            'similarity2_di_abs': diagonals2.abs(),
+            'similarity2_co_abs': coocurences2.abs(),
         }
 
         features_moments = {
             k: v for name, value in features_base.items() for k, v in hlp.get_moments_recursive(name, value)
         }
-
-        out = {
-            'name': name,
+        return {
             'num_features': features_flat_norm.shape[0],
             **dict(map(lambda d: (d[0], d[1].item()), features_moments.items()))
+        }
+
+    for name in set(map(lambda x: x.rsplit('.', 1)[0], parameters.keys())):
+        features_weight = parameters.get('{}.weight'.format(name), None)
+        features_bias = parameters.get('{}.bias'.format(name), None)
+        stats_weight = get_stats(features_weight)
+        stats_bias = get_stats(features_bias)
+        out = {
+            'name': name,
+            **dict(map(lambda d: ('{}_weight'.format(d[0]), d[1]), stats_weight.items())),
+            **dict(map(lambda d: ('{}_bias'.format(d[0]), d[1]), stats_bias.items())),
             
             # 'toe_norm_mean': toeplitz_norm.mean().item(),
             # 'toe_norm_std': toeplitz_norm.std().item(),
@@ -144,47 +151,46 @@ def calc_weight_norms(network):
     for name, module in network.named_modules():
         if hasattr(module, 'frob_norm'):
             for k, v in module.frob_norm.items():
-                stats_norms.loc[name + '.' + k, 'norm_frob'] = v.item()
+                stats_norms.loc[name, 'norm_frob_' + k] = v.item()
         if hasattr(module, 'spectral_norm'):
-            stats_norms.loc[name + '.weight', 'norm_spectral'] = module.spectral_norm.item()
+            stats_norms.loc[name, 'norm_spectral'] = module.spectral_norm.item()
     return stats_norms
 
-def calc_weight_stats(folder_train, trainers, folds, epochs):
+def calc_weight_stats(trainers, folds, epochs):
     output_dir = 'data/csv/weights'
     os.makedirs(output_dir, exist_ok=True)
 
     for trainer, fold, epoch in itertools.product(trainers, folds, epochs):
         print(trainer, fold, epoch)
 
-        tmodel, params = load_model_and_checkpoint_files(
-            os.path.join(folder_train, trainer),
-            fold_id_mapping[fold],
-            mixed_precision=True,
-            checkpoint_name='model_ep_{:0>3}'.format(epoch)
-        )
-        if epoch > 0:
-            tmodel.load_checkpoint_ram(params[0], False)
+        tmodel = hlp.load_model(trainer, fold, epoch)
         tmodel.network.do_ds = False
         for p in tmodel.network.parameters():
             p.requires_grad = False
+        for name, module in tmodel.network.named_modules():
+            module.full_name = name
+            if hasattr(module, 'inplace'):
+                module.inplace = False
         
         parameters = dict(tmodel.network.named_parameters())
-        #parameters = load_parameters(trainer, fold, epoch)
         
         
         stats_norms = calc_weight_norms(tmodel.network)
-        
 
         stats = pd.DataFrame(generate_stats_weights(
             parameters
-        )).set_index('name')
-        print(set(stats_norms.index) - set(stats.index))
-        stats = stats.join(stats_norms)
+        ))
+        stats = stats.join(
+            stats_norms,
+            how='outer',
+            on='name'
+        )
 
         stats['trainer'] = trainer
         stats['fold_train'] = fold
         stats['epoch'] = epoch
-        stats.reset_index().to_csv(
+        print(stats)
+        stats.to_csv(
             os.path.join(
                 output_dir,
                 'weights-{}-{}-{}.csv'.format(trainer, fold, epoch)
@@ -194,8 +200,7 @@ def calc_weight_stats(folder_train, trainers, folds, epochs):
 def plot_weight_stats():
     stats = pd.concat([
         pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
-    ])
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    ]).reset_index(drop=True)
 
     index = ['trainer', 'fold_train', 'epoch']
     scores = pd.concat([
@@ -203,103 +208,123 @@ def plot_weight_stats():
             'Task601_cc359_all_training',
             *ids
         ) for ids in stats[index].drop_duplicates().values.tolist()
-    ])
-    #index = [*index, 'fold_test']
-    scores = scores.groupby(index).agg({
-        'dice_score': ['mean', 'std'],
-        'sdice_score': ['mean', 'std']
-    }).reset_index()
+    ]).reset_index(drop=True)
+    scores = scores.groupby(index).agg(
+        optimizer=('optimizer', 'first'),
+        wd=('wd', 'first'),
+        DA=('DA', 'first'),
+        bn=('bn', 'first'),
+        dice_score_mean=('dice_score', 'mean'),
+        dice_score_std=('dice_score', 'std'),
+        iou_score_mean=('iou_score', 'mean'),
+        iou_score_std=('iou_score', 'std'),
+        sdice_score_mean=('sdice_score', 'mean'),
+        sdice_score_std=('sdice_score', 'std')
+    ).reset_index()
+
     stats = stats.join(scores.set_index(index), on=index)
-    stats = stats[stats['name'].str.endswith('.weight')]
-    stats['name'] = stats['name'].str.replace('.weight', '')
 
-    layers_set = set(hlp.get_layers_ordered())
+    stats.rename(columns={ 'name': 'layer' }, inplace=True)
     layers_position_map = hlp.get_layers_position_map()
-    stats.rename(
-        columns={
-            'name': 'layer'
-        },
-        inplace=True
-    )
-
-    stats = stats[stats['layer'].isin(layers_set)]
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
 
-    # import random
-    # random.seed(0)
-    # stats['layer_pos'] = stats['layer_pos'].apply(lambda d: d + (random.random() - 0.5) * 0.7)
+    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)    
+    stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
 
-
-
-    stats['stable_rank'] = stats['norm_frob'] / (stats['norm_spectral'] + 0.00001)
+    stats['stable_rank'] = (stats['norm_frob_weight'] ** 2) / ((stats['norm_spectral'] ** 2) + 0.00001)
     
-
-    columns = [
-        'stable_rank',
-        *list(filter(lambda c: any(s in c for s in ['norm_', 'features', 'similarity', 'norm_']), stats.columns.values.tolist()))
-    ]
-
-    stats = hlp.numerate_nested(stats, [
-        'trainer_short',
-        'fold_train',
-        'epoch',
-    ])
-
-    stats['psize'] = stats['epoch'] / 10
-
-    column_color = ('sdice_score', 'mean')
+    stats_base = stats
+    print(stats)
 
     output_dir = 'data/fig/weights'
     os.makedirs(output_dir, exist_ok=True)
 
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+
+
+    columns = [
+        'stable_rank',
+        *list(filter(lambda c: any(s in c for s in [
+            'norm_',
+            'features',
+            'similarity',
+        ]), stats.columns.values.tolist()))
+    ]
+    print(columns)
+
+    stats = stats_base.copy()
+    print(stats)
+    stats = stats[stats['layer_pos'] >= 0]
+    stats = stats[~stats['layer'].str.endswith('.lrelu')]
+    stats = stats[~stats['layer'].str.endswith('.instnorm')]
     for column in columns:
-        # fig, axes = hlp.create_plot(
-        #     joined,
-        #     column_x='layer_pos',
-        #     column_y=(column, 'mean'),
-        #     column_subplots='trainer_short',
-        #     column_size='psize',
-        #     column_color=column_color,
-        #     ncols=1,
-        #     figsize=(32, 24),
-        #     lim_same_x=True,
-        #     lim_same_y=True,
-        #     lim_same_c=True,
-        #     colormap='cool'
-        # )
-        fig, axes = hlp.create_plot(
-            stats,
-            column_x='x',
-            column_y=column,
-            column_subplots='layer_pos',
-            column_size='psize',
-            column_color=column_color,
-            ncols=2,
-            figsize=(42, 24*4),
-            lim_same_x=False,
-            lim_same_y=False,
-            lim_same_c=True,
-            colormap='cool',
-            fig_num='weights',
-            fig_clear=True
-        )
-        fig.savefig(
-            os.path.join(
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
                 output_dir,
-                'weights-{}.png'.format(column)
+                'weights-layer_pos-{}-dice_score-trainer_short.png'.format(column)
             ),
-            bbox_inches='tight',
-            pad_inches=0
+            data=stats,
+            kind='line',
+            x='layer_pos',
+            y=column,
+            col='fold_train',
+            col_order=stats['fold_train'].sort_values().unique(),
+            row='trainer_short',
+            row_order=stats['trainer_short'].sort_values().unique(),
+            hue='dice_score_mean',
+            palette='cool',
+            #style='fold_train',
+            size='epoch',
+            height=6,
+            aspect=2,
+            estimator=None,
+            ci=None,
+            facet_kws=dict(
+                sharey='row'
+            )
         )
-        plt.close(fig)
 
 
-def plot_weights(trainers, folds, epochs, load_parameters):
+    # stats = stats_base.copy()
+    # stats['layer'] = stats['layer'].fillna('all')
+    # stats = stats[~stats['layer'].str.endswith('.lrelu')]
+    # for layer in stats['layer'].drop_duplicates():
+    #     stats_l = stats[stats['layer'] == layer]
+    #     add_async_task(
+    #             hlp.relplot_and_save,
+    #             outpath=os.path.join(
+    #                 output_dir,
+    #                 'weights-norm_spectral-dice_score-trainer_short-{}.png'.format(layer)
+    #             ),
+    #             data=stats_l,
+    #             kind='scatter',
+    #             x='norm_spectral',
+    #             y='dice_score_mean',
+    #             col='optimizer',
+    #             col_order=stats['optimizer'].sort_values().unique(),
+    #             row='wd_bn',
+    #             row_order=stats['wd_bn'].sort_values().unique(),
+    #             hue='fold_train',
+    #             #palette='cool',
+    #             style='DA',
+    #             size='epoch',
+    #             height=6,
+    #             aspect=2,
+    #             estimator=None,
+    #             ci=None,
+    #         )
+    
+    join_async_tasks()
+
+
+def plot_weights(trainers, folds, epochs):
     layers_position_map = hlp.get_layers_position_map()
     for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
         print(trainer, fold_train, epoch)
 
-        parameters_dict = load_parameters(trainer, fold_train, epoch)
+        tmodel = hlp.load_model(trainer, fold_train, epoch)
+        parameters_dict = dict(tmodel.network.named_parameters())
 
         for name, parameters in parameters_dict.items():
             if len(parameters.shape) < 4:
@@ -340,41 +365,24 @@ def plot_weights(trainers, folds, epochs, load_parameters):
             #     trainer, fold_train, epoch, layer_id
             # ))
             # plt.close(fig)
+        
 
 
-folder_train = 'archive/old/nnUNet-container/data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training'
-#folder_train = 'data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training'
 trainers = [
-    # 'nnUNetTrainerV2_MA_Lab_ResidualUNet_Lovasz_relu_bn_ep40_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lab_ResidualUNet_Lovasz_relu_bn_ep40__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lab_Lovasz_ep40_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lab_Lovasz_ep40__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_depth5_SGD_ep40_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_depth5_SGD_ep40__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_depth5_SGD_ep40_noDA-it2__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_depth5_SGD_ep40-it2__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_ep40_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_ep40__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_depth5_ep40_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_Lovasz_noscheduler_depth5_ep40__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40_noDA-it2__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40-it2__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40_nomirror__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40_norotation__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40_nogamma__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep40_noscaling__nnUNetPlansv2.1',
-
-
     'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
+    
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -386,47 +394,8 @@ folds = [
 ]
 epochs = [10, 20, 30, 40, 80, 120]
 
-def load_parameters(trainer, fold, epoch):
-    return torch.load(
-        os.path.join(
-            folder_train,
-            trainer,
-            'fold_{}'.format(fold_id_mapping[fold]),
-            'model_ep_{:0>3}.model'.format(epoch)
-        ),
-        map_location=torch.device('cpu')
-    )['state_dict']
+#calc_weight_stats(trainers, folds, epochs)
 
+plot_weight_stats()
 
-# folder_train = 'code/lab_med_viz/baseline_results1'
-# trainers = [
-#     'baseline_focal_lovasz_Adam_None_None_frontback',
-#     'baseline_focal_lovasz_Adam_rand_aug_None_frontback'
-# ]
-# folds = [
-#     'siemens15',
-#     'siemens3',
-#     'ge15',
-#     'ge3',
-#     'philips15',
-#     'philips3'
-# ]
-# epochs = [39]#[9, 19, 29, 39]
-# def load_parameters(trainer, fold, epoch):
-#     return torch.load(
-#         os.path.join(
-#             folder_train,
-#             trainer,
-#             'mode_{}'.format(fold_id_mapping[fold]),
-#             'e_{}.pth'.format(epoch)
-#         ),
-#         map_location=torch.device('cpu')
-#     )['model_state_dict']
-
-
-
-
-#calc_weight_stats(folder_train, trainers, folds, epochs)
-
-#plot_weight_stats()
-#plot_weights(trainers, folds, epochs, load_parameters)
+#plot_weights(trainers, folds, epochs)

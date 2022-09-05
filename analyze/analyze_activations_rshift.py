@@ -4,7 +4,6 @@ import pandas as pd
 import itertools
 import glob
 import os
-import matplotlib.pyplot as plt
 import helpers as hlp
 
 def get_kullback_liebler_divergence(P, Q):
@@ -155,107 +154,206 @@ def calc_rshift(task, trainers, folds, epochs, output_dir):
 def plot_rshift(stats_path):
     stats = pd.concat([
         pd.read_csv(path) for path in glob.iglob(os.path.join(stats_path, '*'), recursive=False)
-    ])
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
-
+    ]).reset_index(drop=True)
     index = ['trainer', 'fold_train', 'epoch']
     scores = pd.concat([
         hlp.get_scores(
             'Task601_cc359_all_training',
             *ids
         ) for ids in stats[index].drop_duplicates().values.tolist()
-    ])
-    index = [*index, 'fold_test']
+    ]).reset_index(drop=True)
+    index = [*index, 'fold_test', 'is_validation']
     scores = scores.groupby(index).agg(
-        iou_score_mean=('iou_score', 'mean'),
+        optimizer=('optimizer', 'first'),
+        wd=('wd', 'first'),
+        DA=('DA', 'first'),
+        bn=('bn', 'first'),
         dice_score_mean=('dice_score', 'mean'),
+        dice_score_std=('dice_score', 'std'),
+        iou_score_mean=('iou_score', 'mean'),
+        iou_score_std=('iou_score', 'std'),
         sdice_score_mean=('sdice_score', 'mean'),
+        sdice_score_std=('sdice_score', 'std')
     ).reset_index()
     stats = stats.join(scores.set_index(index), on=index)
 
     layers_position_map = hlp.get_layers_position_map()
     layers_position_map['input'] = -2
     layers_position_map['gt'] = -1
-    stats.rename(
-        columns={
-            'name': 'layer'
-        },
-        inplace=True
-    )
+    stats.rename(columns={ 'name': 'layer' }, inplace=True)
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
-    stats['same_fold'] = (stats['fold_train'] == stats['fold_test']).astype(int)
+    stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
+    stats['optimizer_wd_bn'] = stats['optimizer'] + ' ' + stats['wd_bn']
+    stats['wd_bn_DA'] = stats['wd_bn'] + ' ' + stats['DA']
+    stats['same_domain'] = stats['fold_train'] == stats['fold_test']
+    stats['domain_val'] = stats['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + stats['is_validation'].apply(lambda x: 'validation' if x else '')
+    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    stats['trainer_short_epoch'] = stats['trainer_short'] + " " + stats['epoch'].apply(lambda x: str(x).rjust(3, '0'))
 
+    print(stats)
+    print(stats.head(20).to_string())
 
-    columns = [
-        'rshift',
-        'a_mean',
-        'a_std',
-        'b_mean',
-        'b_std',
-        'diff_mean',
-        'diff_std',
-        'diff_mean_abs',
-        'diff_std_abs',
-    ]
-
-    stats = hlp.numerate_nested(stats, [
-        'epoch',
-        'trainer_short',
-        'fold_train',
-        'same_fold',
-        'fold_test',
-    ])
-
-    stats['psize'] = stats['epoch'] / 10 + stats['same_fold'] * 5
-
-    column_color = ('sdice_score_mean')
-    
-    #stats = stats[stats['same_fold'] == 0]
-    stats = stats[stats['epoch'] >= 40]
-    #stats = stats[stats['epoch'] == 40]
-
-    output_dir = os.path.join(
-        'data/fig/activations-rshift',
-        os.path.basename(stats_path)
-    )
+    output_dir = 'data/fig/activations-rshift'
     os.makedirs(output_dir, exist_ok=True)
 
-    for column in columns:
-        print(column)
-        fig, axes = hlp.create_plot(
-            stats,
-            column_x='x',
-            column_y=column,
-            column_subplots='layer_pos',
-            column_size='psize',
-            column_color=column_color,
-            ncols=2,
-            figsize=(42, 24*4),
-            lim_same_x=False,
-            lim_same_y=False,
-            lim_same_c=True,
-            colormap='cool',
-            fig_num='activations_rshift',
-            fig_clear=True
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+
+    columns = ['dice_score']
+    aggs = ['mean']
+    #stats = stats[stats['fold_train'] == 'siemens15']
+    #stats = stats[stats['epoch'] == 120]
+    #stats = stats[stats['layer_pos'] <= 39]
+    #stats = stats[stats['fold_test'] == 'siemens3']
+    stats = stats[stats['DA'].isin(['none', 'full'])]
+    print(stats)
+    # print(stats[[
+    #     'task',
+    #     'trainer',
+    #     'fold_train',
+    #     'epoch',
+    #     'fold_test',
+    #     'is_validation',
+    #     'layer',
+    #     'optimizer',
+    #     'wd',
+    #     'DA',
+    #     'bn'
+    # ]].to_string())
+    # for column, agg in itertools.product(columns, aggs):
+    #     add_async_task(
+    #         hlp.relplot_and_save,
+    #         outpath=os.path.join(output_dir, 'rshift-layer_pos-fold_test-{}-{}.png'.format(column, agg)),
+    #         data=stats,
+    #         kind='scatter',
+    #         x='rshift',
+    #         y='{}_{}'.format(column, agg),
+    #         # col='trainer_short',
+    #         # col_order=stats['trainer_short'].sort_values().unique(),
+    #         col='optimizer_wd_bn',
+    #         col_order=stats['optimizer_wd_bn'].sort_values().unique(),
+    #         row='layer_pos',
+    #         row_order=stats['layer_pos'].sort_values().unique(),
+    #         #hue='fold_train',
+    #         hue='DA',
+    #         #hue='same_domain',
+    #         style='domain_val',
+    #         size='epoch',
+    #         height=3,
+    #         aspect=2,
+    #         ci=None,
+    #         facet_kws=dict(
+    #             #sharex='col'
+    #             sharex=False
+    #         )
+    #     )
+    #stats = stats[stats['fold_train'] == 'siemens15']
+    stats = stats[stats['epoch'].isin([20, 40, 120])]
+    #stats = stats[stats['layer_pos'] <= 39]
+    #stats = stats[stats['layer_pos'] > 4]
+    #stats = stats[stats['fold_test'] == 'siemens3']
+    stats = stats[stats['DA'].isin(['none', 'full'])]
+    stats = stats[stats['domain_val'] != 'other validation']
+    print(stats)
+    # add_async_task(
+    #     hlp.relplot_and_save,
+    #     outpath=os.path.join(output_dir, 'rshift-layer_pos-epoch-rshift.png'),
+    #     data=stats,
+    #     kind='line',
+    #     x='epoch',
+    #     y='rshift',
+    #     col='trainer_short',
+    #     col_order=stats['trainer_short'].sort_values().unique(),
+    #     row='layer_pos',
+    #     row_order=stats['layer_pos'].sort_values().unique(),
+    #     hue='fold_test',
+    #     style='domain_val',
+    #     size='fold_train',
+    #     #units='',
+    #     height=3,
+    #     aspect=2,
+    #     ci=None,
+    #     # facet_kws=dict(
+    #     #     sharex='col'
+    #     # )
+    # )
+
+    # add_async_task(
+    #     hlp.relplot_and_save,
+    #     outpath=os.path.join(output_dir, 'rshift-epoch-layer_pos-rshift.png'),
+    #     data=stats,
+    #     kind='line',
+    #     x='layer_pos',
+    #     y='rshift',
+    #     col='optimizer_wd_bn',
+    #     col_order=stats['optimizer_wd_bn'].sort_values().unique(),
+    #     row='epoch',
+    #     row_order=stats['epoch'].sort_values().unique(),
+    #     hue='dice_score_mean',
+    #     palette='cool',
+    #     style='DA',
+    #     #style='domain_val',
+    #     #size='fold_train',
+    #     #units='fold_test',
+    #     height=6,
+    #     aspect=2,
+    #     estimator=None,
+    #     ci=None,
+    #     facet_kws=dict(
+    #         sharey='none'
+    #     )
+    # )
+    #stats['rshift_sqrt'] = stats['rshift'] ** (0.5)
+    for bn in stats['bn'].sort_values().unique():
+        stats2 = stats[stats['bn'] == bn]
+        if not bn:
+            stats2 = stats2[~stats2['layer'].str.endswith('.instnorm')]
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'rshift-dice_score_mean-layer_pos-rshift-bn={}.png'.format(bn)),
+            data=stats2,
+            kind='line',
+            x='layer_pos',
+            y='rshift',
+            yscale='log',
+            col='trainer_short',
+            col_order=stats2['trainer_short'].sort_values().unique(),
+            row='fold_train',
+            row_order=stats2['fold_train'].sort_values().unique(),
+            hue='dice_score_mean',
+            #hue='epoch',
+            palette='cool',
+            style='fold_test',
+            size='epoch',
+            #units='fold_test',
+            height=8,
+            aspect=4,
+            estimator=None,
+            ci=None,
+            # facet_kws=dict(
+            #     sharey='none'
+            # )
         )
-        fig.savefig(
-            os.path.join(
-                output_dir,
-                'activations-rshift-{}.png'.format(column)
-            ),
-            bbox_inches='tight',
-            pad_inches=0
-        )
-        plt.close(fig)
+    
+    join_async_tasks()
 
 
 
 task = 'Task601_cc359_all_training'
 trainers = [
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
+
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',

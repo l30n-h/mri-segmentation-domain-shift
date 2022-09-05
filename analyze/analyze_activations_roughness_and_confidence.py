@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import pandas as pd
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import itertools
 import os
@@ -388,216 +387,277 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
 def plot_roughness_and_confidence_grouped():
     stats = pd.concat([
         pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s12-b24*.csv', recursive=False)
-    ])
-    stats.rename(
-        columns={
-            'name':'layer'
-        },
-        inplace = True
-    )
-
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    ]).reset_index(drop=True)
+    stats.rename(columns={'name':'layer'}, inplace = True)
     layers_position_map = hlp.get_layers_position_map()
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
+    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    stats['same_domain'] = stats['fold_train'] == stats['fold_test']
+    stats['trained_on'] = stats['same_domain'] & (~stats['is_validation'])
+    stats['domain_val'] = stats['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + stats['is_validation'].apply(lambda x: 'validation' if x else '')
+
 
     stats_weights = pd.concat([
         pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
-    ])
-    stats_weights['name'] = stats_weights['name'].str.replace('.weight', '')
+    ]).reset_index(drop=True)
+    stats_weights['name'] = stats_weights['name'].fillna('all')
     # take .conv weights if instancenorm was last layer
     stats_weights = stats_weights[~stats_weights['name'].str.endswith('.lrelu')]
-    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.lrelu')
-    stats_weights = stats_weights[['trainer', 'fold_train', 'epoch', 'name', 'norm_frob', 'norm_spectral']]
+    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.lrelu', regex=True)
+    stats_weights = stats_weights[['trainer', 'fold_train', 'epoch', 'name', 'norm_frob_weight', 'norm_spectral']]
+    stats = stats.join(
+        stats_weights.set_index(['trainer', 'fold_train', 'epoch', 'name']),
+        on=['trainer', 'fold_train', 'epoch', 'layer']
+    )
+    for column in ['roughness', 'confidence', 'confidence_weighted']:
+        stats[column + '_frob'] = stats[column] / stats['norm_frob_weight']
+        stats[column + '_spectral'] = stats[column] / stats['norm_spectral']
+
+
+    # stats = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'trained_on', 'layer', 'layer_pos']).agg(
+    #     'mean'
+    # ).reset_index()
+    # agg_ext = ['trained_on']
+    # style = 'trained_on'
+    # subdir = 'train-test-meaned'
+
+    agg_ext = ['fold_test', 'domain_val']
+    style = 'domain_val'
+    stats = stats[~stats['trainer'].str.contains('_bn')]
+    subdir = 'in/train-test-all'
+    # stats = stats[stats['trainer'].str.contains('_bn')]
+    # subdir = 'bn/train-test-all'
 
     # TODO
     stats = stats[~stats['layer'].str.startswith('conv_blocks_context.0.blocks.0')]
     stats = stats[~stats['layer'].str.startswith('seg_outputs')]
     stats = stats[~stats['layer'].str.startswith('tu')]
+    stats = stats[stats['domain_val'] != 'other validation']
     # 
-    stats = stats.join(
-        stats_weights.set_index(['trainer', 'fold_train', 'epoch', 'name']),
-        on=['trainer', 'fold_train', 'epoch', 'layer']
-    )
 
-    columns = [
-        'roughness',
-        'confidence',
-        'confidence_weighted',
-    ]
-    for column in columns:
-        stats[column + '_frob'] = stats[column] / stats['norm_frob']
-        stats[column + '_spectral'] = stats[column] / stats['norm_spectral']
-    columns = [
-        'roughness',
-        'confidence',
-        'confidence_weighted',
-        'roughness_frob',
-        'confidence_frob',
-        'confidence_weighted_frob',
-        'roughness_spectral',
-        'confidence_spectral',
-        'confidence_weighted_spectral',
-        *list(filter(
-            lambda c: c.startswith('pca_') or c.startswith('kmeans_'),
-            stats.columns.values.tolist()
-        ))
-    ]
-
-
-    stats_meaned = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'fold_test', 'is_validation']).agg(
-        iou_score_mean=('iou_score_mean', 'first'),
-        dice_score_mean=('dice_score_mean', 'first'),
-        sdice_score_mean=('sdice_score_mean', 'first'),
-        roughness_mean=('roughness', 'mean'),
-        confidence_mean=('confidence', 'mean'),
-        confidence_weighted_mean=('confidence_weighted', 'mean'),
-        roughness_frob_mean=('roughness_frob', 'mean'),
-        confidence_frob_mean=('confidence_frob', 'mean'),
-        confidence_weighted_frob_mean=('confidence_weighted_frob', 'mean'),
-        roughness_spectral_mean=('roughness_spectral', 'mean'),
-        confidence_spectral_mean=('confidence_spectral', 'mean'),
-        confidence_weighted_spectral_mean=('confidence_weighted_spectral', 'mean'),
-        pca_src_variance_ratio_cumsum_index_max_mean=('pca_src_variance_ratio_cumsum_index_max', 'mean'),
-        pca_dst_variance_ratio_cumsum_index_max_mean=('pca_dst_variance_ratio_cumsum_index_max', 'mean'),
-    ).reset_index()
-    stats_meaned['subplot'] = stats_meaned['trainer_short'] + '_' + stats_meaned['fold_train']
-    stats_meaned['psize'] = stats_meaned['epoch'] / 10 + (stats_meaned['fold_train'] == stats_meaned['fold_test']).astype(int) * 5
-
-
-    stats_layered = stats.copy()
-    stats_layered['subplot'] = stats_layered['trainer_short'] + '_' + stats_layered['fold_train']
-    stats_layered['line'] = stats_layered['epoch'].map(str) + '_' + stats_layered['fold_test'] + '_' + stats_layered['is_validation'].map(str)
-    stats_layered_colors = stats_layered.groupby(['subplot', 'line']).agg(
-        iou_score_mean=('iou_score_mean', 'first'),
-        dice_score_mean=('dice_score_mean', 'first'),
-        sdice_score_mean=('sdice_score_mean', 'first'),
-        #fold_test=('fold_test', 'first'),
-        epoch=('epoch', 'first'),
-        #is_validation=('is_validation', 'first'),
-    )
-    layered_line_columns = stats_layered['line'].unique()
-    stats_layered = stats_layered.pivot(
-        index=['subplot', 'layer_pos'],
-        columns=['line']
-    ).reset_index(col_level=1)
-
-    stats_train = stats.copy()
-    stats_train = stats_train[(stats_train['fold_train'] == stats_train['fold_test']) & (~stats_train['is_validation'])]
-    stats_train['subplot'] = stats_train['trainer_short'] + '_' + stats_train['fold_train']
-    stats_train = stats_train.pivot(
-        index=['subplot', 'layer_pos'],
-        columns=['epoch']
-    ).reset_index(col_level=1)
-    stats_train.columns = ['_'.join(str(s).strip() for s in col if s) for col in stats_train.columns]
     
-    print(stats_train.columns.values)
 
-    output_dir = 'data/fig/activations-roughness-and-confidence'
+    print(stats)
+
+    output_dir = os.path.join(
+        'data/fig/activations-roughness-and-confidence/',
+        subdir
+    )
     os.makedirs(output_dir, exist_ok=True)
 
-    for column in [
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+
+    columns_scores = [
         'roughness',
-        'confidence',
+        #'confidence',
         'confidence_weighted',
         'roughness_frob',
-        'confidence_frob',
+        #'confidence_frob',
         'confidence_weighted_frob',
-        'roughness_spectral',
-        'confidence_spectral',
-        'confidence_weighted_spectral',
-        'pca_src_variance_ratio_cumsum_index_max',
-        'pca_dst_variance_ratio_cumsum_index_max'
-    ]:
-        print(column)
-        fig, axes = hlp.create_plot(
-            stats_meaned,
-            column_x='{}_mean'.format(column),
-            column_y='iou_score_mean',
-            #column_y='sdice_score_mean',
-            column_subplots='subplot',
-            column_size='psize',
-            column_color='iou_score_mean',
-            #column_color='sdice_score_mean',
-            ncols=2,
-            figsize=(42, 24),
-            lim_same_x=True,
-            lim_same_y=True,
-            lim_same_c=True,
-            colormap='cool',
-            fig_num='activations-roughness-and-confidence',
-            fig_clear=True
-        )
-        fig.savefig(
-            os.path.join(
-                output_dir,
-                'activations-roughness-and-confidence-grouped-relu-and-residual-meaned-{}.png'.format(column)
-            ),
-            bbox_inches='tight',
-            pad_inches=0
-        )
-        plt.close(fig)
+        #'roughness_spectral',
+        #'confidence_spectral',
+        #'confidence_weighted_spectral'
+    ]
+    columns_train = [
+        'pca_src_noise_variance',
+        #'pca_src_variance_ratio_cumsum_index_gt_90',
+        #'pca_src_variance_ratio_cumsum_index_gt_95',
+        #'pca_src_variance_ratio_cumsum_index_gt_98',
+        #'pca_src_variance_ratio_cumsum_index_gt_99',
+        #'pca_src_variance_ratio_cumsum_index_max',
+        #'pca_src_variance_ratio_cumsum_min',
+        'pca_src_variance_ratio_cumsum_max',
+        'pca_src_variance_ratio_cumsum_mean',
+        #'pca_src_variance_ratio_cumsum_std',
+        #'pca_src_variance_ratio_cumsum_skewness',
+        #'pca_src_variance_ratio_cumsum_kurtosis',
 
-        stats_layered_filtered = stats_layered[['', column]]
-        stats_layered_filtered.columns = stats_layered_filtered.columns.droplevel(0)
-        fig, axes = hlp.create_plot(
-            stats_layered_filtered,
-            column_x='layer_pos',
-            column_y=layered_line_columns,
-            kind='line',
-            column_subplots='subplot',
-            column_color='iou_score_mean',
-            #column_color='epoch',
-            #column_color='sdice_score_mean',
-            colors=stats_layered_colors,
-            ncols=2,
-            figsize=(42, 24),
-            lim_same_x=True,
-            lim_same_y=True,
-            lim_same_c=True,
-            colormap='cool',
-            legend=False,
-            fig_num='activations-roughness-and-confidence',
-            fig_clear=True
-        )
-        fig.savefig(
-            os.path.join(
+        'pca_dst_noise_variance',
+        #'pca_dst_variance_ratio_cumsum_index_gt_90',
+        #'pca_dst_variance_ratio_cumsum_index_gt_95',
+        #'pca_dst_variance_ratio_cumsum_index_gt_98',
+        #'pca_dst_variance_ratio_cumsum_index_gt_99',
+        #'pca_dst_variance_ratio_cumsum_index_max',
+        #'pca_dst_variance_ratio_cumsum_min',
+        'pca_dst_variance_ratio_cumsum_max',
+        'pca_dst_variance_ratio_cumsum_mean',
+        #'pca_dst_variance_ratio_cumsum_std',
+        #'pca_dst_variance_ratio_cumsum_skewness',
+        #'pca_dst_variance_ratio_cumsum_kurtosis',
+
+        'norm_frob_weight',
+        'norm_spectral',
+    ]
+    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch', *agg_ext]).agg(
+        trained_on=('trained_on', 'first'),
+        iou_score_mean=('iou_score_mean', 'first'),
+        dice_score_mean=('dice_score_mean', 'first'),
+        sdice_score_mean=('sdice_score_mean', 'first'),
+        **{
+            '{}_mean'.format(column): (column, 'mean') for column in columns_scores
+        },
+        **{
+            '{}_mean'.format(column): (column, 'mean') for column in columns_train
+        }
+    ).reset_index()
+
+    plot_settings = {
+        'ci': None,
+        'hue': 'iou_score_mean',
+        'palette': 'rainbow',
+        'aspect': 2,
+        'height': 6,
+    }
+
+    for column in columns_scores:
+        print(column)
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
                 output_dir,
-                'activations-roughness-and-confidence-grouped-relu-and-residual-layered-{}.png'.format(column)
+                'meaned-trainer-{}.png'.format(column)
             ),
-            bbox_inches='tight',
-            pad_inches=0
+            data=stats_meaned_over_layer,
+            kind='scatter',
+            x='{}_mean'.format(column),
+            y='iou_score_mean',
+            row='trainer_short',
+            row_order=stats_meaned_over_layer['trainer_short'].sort_values().unique(),
+            col='fold_train',
+            style=style,
+            size='epoch',
+            **plot_settings
         )
-        plt.close(fig)
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                'meaned-single-{}.png'.format(column)
+            ),
+            data=stats_meaned_over_layer,
+            kind='scatter',
+            x='{}_mean'.format(column),
+            y='iou_score_mean',
+            style=style,
+            size='epoch',
+            **plot_settings
+        )
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                'layered-trainer-{}.png'.format(column)
+            ),
+            data=stats,
+            kind='line',
+            x='layer_pos',
+            y=column,
+            row='trainer_short',
+            row_order=stats['trainer_short'].sort_values().unique(),
+            col='fold_train',
+            style=style,
+            #size='epoch',
+            **plot_settings
+        )
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                'layered-single-{}.png'.format(column)
+            ),
+            data=stats,
+            kind='line',
+            x='layer_pos',
+            y=column,
+            style=style,
+            #size='epoch',
+            **plot_settings
+        )
     
-    for column in ['variance_ratio_cumsum_m', 'noise_variance', 'inertia', 'n_iter', 'norm', 'index_max']:
-        fig, axes = hlp.create_plot(
-            stats_train,
-            column_x='layer_pos',
-            column_y=list(filter(
-                lambda c: column in c,
-                stats_train.columns.values.tolist()
-            )),
-            kind='line',
-            column_subplots='subplot',
-            ncols=2,
-            figsize=(42, 24),
-            lim_same_x=True,
-            lim_same_y=True,
-            lim_same_c=True,
-            colormap='cool',
-            legend=True,
-            fig_num='activations-roughness-and-confidence',
-            fig_clear=True
-        )
-        fig.savefig(
-            os.path.join(
+    stats_train = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'layer_pos']).agg(
+        iou_score_mean=('iou_score_mean', 'mean'),
+        dice_score_mean=('dice_score_mean', 'mean'),
+        sdice_score_mean=('sdice_score_mean', 'mean'),
+        **{
+            column: (column, 'mean') for column in columns_train
+        }
+    ).reset_index()
+    stats_train_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch']).agg(
+        iou_score_mean=('iou_score_mean', 'mean'),
+        dice_score_mean=('dice_score_mean', 'mean'),
+        sdice_score_mean=('sdice_score_mean', 'mean'),
+        **{
+            '{}_mean'.format(column): (column, 'mean') for column in columns_train
+        }
+    ).reset_index()
+    print(stats_train)
+    print(stats_train_meaned_over_layer)
+    for column in columns_train:
+        print(column)
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
                 output_dir,
-                'activations-roughness-and-confidence-grouped-relu-and-residual-layered-{}.png'.format(column)
+                'meaned-trainer-{}.png'.format(column)
             ),
-            bbox_inches='tight',
-            pad_inches=0
+            data=stats_train_meaned_over_layer,
+            kind='scatter',
+            x='{}_mean'.format(column),
+            y='iou_score_mean',
+            row='trainer_short',
+            row_order=stats_train_meaned_over_layer['trainer_short'].sort_values().unique(),
+            col='fold_train',
+            size='epoch',
+            **plot_settings
         )
-        plt.close(fig)
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                'meaned-single-{}.png'.format(column)
+            ),
+            data=stats_train_meaned_over_layer,
+            kind='scatter',
+            x='{}_mean'.format(column),
+            y='iou_score_mean',
+            size='epoch',
+            **plot_settings
+        )
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                'layered-trainer-{}.png'.format(column)
+            ),
+            data=stats_train,
+            kind='line',
+            x='layer_pos',
+            y=column,
+            row='trainer_short',
+            row_order=stats_train['trainer_short'].sort_values().unique(),
+            col='fold_train',
+            #size='epoch',
+            **plot_settings
+        )
+
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                'layered-single-{}.png'.format(column)
+            ),
+            data=stats_train,
+            kind='line',
+            x='layer_pos',
+            y=column,
+            #size='epoch',
+            **plot_settings
+        )
+
+    join_async_tasks()
 
 
 
@@ -612,6 +672,11 @@ trainers = [
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -624,7 +689,7 @@ folds = [
 epochs = [10,20,30,40,80,120]
 
 
-calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
+#calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
 plot_roughness_and_confidence_grouped()
 
 
