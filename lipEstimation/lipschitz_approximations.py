@@ -283,27 +283,43 @@ def lipschitz_spectral_ub(model, requires_grad=False):
     #global lip
     #lip = 1
     use_cuda = next(model.parameters()).is_cuda
+    def is_lipschitz_constant_one(layer):
+        classname = layer.__class__.__name__
+        return (
+            classname == 'ReLU' or 
+            classname == 'LeakyReLU' or 
+            classname == 'SoftPlus' or 
+            classname == 'Tanh' or 
+            classname == 'Sigmoid' or 
+            classname == 'ArcTan' or 
+            classname == 'Softsign' or 
+            classname.startswith('MaxPool')
+    )
     def prod_spec(self, input, output):
         if hasattr(self, 'spectral_norm'):
             return
-        ps = list(self.named_parameters(recurse=False))
-        if len(ps) == 0:
-            return
+        # ps = list(self.named_parameters(recurse=False))
+        # if len(ps) == 0:
+        #     return
         if is_convolution_or_linear(self):
             s, _, _ = generic_power_method(self.forward, self.input_sizes[0],
                     use_cuda=use_cuda)
             # print('{} :: {}'.format(self.__class__.__name__, s.data[0]))
             #global lip
             #lip *= s
-            if use_cuda:
-                s = s.cpu()
-            self.spectral_norm = s
+            self.spectral_norm = s.cpu()
             # print(self.__class__.__name__, s)
-        if is_batch_norm(self):
+        elif is_batch_norm(self):
             # One could have also used generic_power_method
             s = lipschitz_bn(self)
-            self.spectral_norm = s
+            self.spectral_norm = s.cpu()
             # print(self.__class__.__name__, s)
+        elif is_lipschitz_constant_one(self):
+            self.spectral_norm = torch.Tensor([1.0])
+        else:
+            s, _, _ = generic_power_method(self.forward, self.input_sizes[0],
+                        use_cuda=use_cuda)
+            self.spectral_norm = s.cpu()
     execute_through_model(prod_spec, model)
     # Return product of Lipschitz constants
     # WARNING: does not work with multiple inputs per layer
@@ -327,7 +343,9 @@ def lipschitz_frobenius_ub(model, requires_grad=False):
              of the parameter matrix, which is not correct...
     """
     def prod_frob(self, input, output):
-        if not is_convolution_or_linear(self):
+        # if not is_convolution_or_linear(self):
+        #     return
+        if hasattr(self, 'frob_norm'):
             return
         ps = list(self.named_parameters(recurse=False))
         if len(ps) == 0:
