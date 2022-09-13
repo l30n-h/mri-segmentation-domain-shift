@@ -176,6 +176,42 @@ class nnUNetTrainerV2_MA_noscheduler_depth5_ep120(nnUNetTrainerV2_MA):
         print(self.lr_scheduler)
 
 
+class nnUNetTrainerV2_MA_noscheduler_depth7_bf24_ep360(nnUNetTrainerV2_MA):
+
+    def __init__(self, plans_file, fold, output_folder=None, dataset_directory=None, batch_dice=True, stage=None,
+                 unpack_data=True, deterministic=True, fp16=False):
+        super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data,
+                         deterministic, fp16)
+
+        self.initial_lr = 1e-4
+        self.weight_decay = 1e-2
+        self.save_latest_only = False
+        self.save_every = 10
+        self.max_num_epochs = 360
+        self.deep_supervision = True
+
+    def load_plans_file(self):
+        super().load_plans_file()
+        self.plans['base_num_features'] = 24
+        for plans_per_stage in self.plans['plans_per_stage'].values():
+            plans_per_stage['batch_size'] = 64
+            plans_per_stage['conv_kernel_sizes'] = [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]]
+            plans_per_stage['pool_op_kernel_sizes'] = [[2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 1]]
+            plans_per_stage['num_pool_per_axis'] = [6, 5]
+            print(plans_per_stage)
+        return self.plans
+
+    def initialize_optimizer_and_scheduler(self):
+        self.optimizer = torch.optim.Adam(
+            self.network.parameters(),
+            self.initial_lr,
+            weight_decay=self.weight_decay
+        )
+        self.lr_scheduler = None
+        print(self.optimizer)
+        print(self.lr_scheduler)
+
+
 class nnUNetTrainerV2_MA_SGD(nnUNetTrainerV2_MA):
 
     def initialize_optimizer_and_scheduler(self):
@@ -368,6 +404,21 @@ class nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120(
 
 class nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA(
     nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120,
+    nnUNetTrainerV2_MA_noDA
+):
+    pass
+
+
+
+
+class nnUNetTrainerV2_MA_noscheduler_depth7_bf24_wd0_ep360(
+    nnUNetTrainerV2_MA_wd0,
+    nnUNetTrainerV2_MA_noscheduler_depth7_bf24_ep360
+):
+    pass
+
+class nnUNetTrainerV2_MA_noscheduler_depth7_bf24_wd0_ep360_noDA(
+    nnUNetTrainerV2_MA_noscheduler_depth7_bf24_wd0_ep360,
     nnUNetTrainerV2_MA_noDA
 ):
     pass

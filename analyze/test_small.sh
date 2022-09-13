@@ -1,20 +1,24 @@
 set -e
 set -o xtrace
 
-trainer_base='MA_noscheduler_depth5_wd0'
 trainers=(
-  "${trainer_base}_ep120"
-  "${trainer_base}_ep120_noDA"
-  "${trainer_base}_SGD_ep120"
-  "${trainer_base}_SGD_ep120_noDA"
-  # "${trainer_base}_ep120_nogamma"
-  # "${trainer_base}_ep120_nomirror"
-  # "${trainer_base}_ep120_norotation"
-  # "${trainer_base}_ep120_noscaling"
-  # "${trainer_base}_SGD_ep120_nogamma"
-  # "${trainer_base}_SGD_ep120_nomirror"
-  # "${trainer_base}_SGD_ep120_norotation"
-  # "${trainer_base}_SGD_ep120_noscaling"
+  # "MA_noscheduler_depth5_wd0_ep120"
+  # "MA_noscheduler_depth5_wd0_ep120_noDA"
+  # "MA_noscheduler_depth5_wd0_SGD_ep120"
+  # "MA_noscheduler_depth5_wd0_SGD_ep120_noDA"
+  # "MA_noscheduler_depth5_wd0_ep120_nogamma"
+  # "MA_noscheduler_depth5_wd0_ep120_nomirror"
+  # "MA_noscheduler_depth5_wd0_ep120_norotation"
+  # "MA_noscheduler_depth5_wd0_ep120_noscaling"
+  # "MA_noscheduler_depth5_wd0_SGD_ep120_nogamma"
+  # "MA_noscheduler_depth5_wd0_SGD_ep120_nomirror"
+  # "MA_noscheduler_depth5_wd0_SGD_ep120_norotation"
+  # "MA_noscheduler_depth5_wd0_SGD_ep120_noscaling"
+  # "MA_noscheduler_depth5_wd0_bn_ep120"
+  # "MA_noscheduler_depth5_wd0_bn_ep120_noDA"
+  # "MA_noscheduler_depth5_wd0_bn_SGD_ep120"
+  # "MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA"
+  # "MA_noscheduler_depth7_bf24_wd0_ep360_noDA"
 )
 declare -A fold_id_mapping
 fold_id_mapping['siemens15']=0
@@ -25,6 +29,10 @@ fold_id_mapping['ge3']=3
 # fold_id_mapping['philips3']=5
 
 epochs=('010' '020' '030' '040' '080' '120')
+#epochs=('010' '020' '030' '040' '080' '120' '200' '280' '360')
+
+#export RESULTS_FOLDER="$HOME/data/nnUNet_trained_models"
+export RESULTS_FOLDER="$HOME/archive/old/nnUNet-container/data/nnUNet_trained_models"
 
 #testset_suffix=''
 testset_suffix='-small'
@@ -48,8 +56,6 @@ do
         testout_dir="data/testout/${folder_name}"
         archive_testout_dir="archive/old/nnUNet-container/data/testout/Task601_cc359_all_training/${folder_name}"
         mkdir ${testout_dir}
-        #python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_simple.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -i data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training/imagesTs${testset_suffix}/ -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
-        #mv -f ${testout_dir}/activations archive/old/nnUNet-container/data/testout/Task601_cc359_all_training/${folder_name}/activations${activations_suffix}
         python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_preprocessed.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -k code/analyze/ids_small.json -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
         rm -rf ${archive_testout_dir}/activations${activations_suffix}
         mv -f ${testout_dir}/prediction_raw/activations ${archive_testout_dir}/activations${activations_suffix}
