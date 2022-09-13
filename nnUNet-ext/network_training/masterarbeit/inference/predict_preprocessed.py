@@ -14,8 +14,8 @@ from nnunet.postprocessing.connected_components import determine_postprocessing
 from nnunet.training.model_restore import load_model_and_checkpoint_files
 from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
 
-import nnunet.training.network_training.masterarbeit.inference.activations_extraction as act_ext
-
+import activations_extraction as act_ext
+from SDiceNiftiEvaluator import SDiceNiftiEvaluator
 
 def predict_preprocessed_ram(
     trainer,
@@ -204,6 +204,7 @@ def predict_preprocessed_fs(
     job_name = trainer.experiment_name
     _ = aggregate_scores(
         pred_gt_tuples,
+        evaluator=SDiceNiftiEvaluator,
         labels=list(range(trainer.num_classes)),
         json_output_file=join(output_folder_prediction, "summary.json"),
         json_name=job_name + " val tiled %s" % (str(use_sliding_window)),
