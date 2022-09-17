@@ -2,25 +2,22 @@ import argparse
 import torch
 import numpy as np
 from multiprocessing import Pool
-import shutil
-from time import sleep
 import json
 
 from batchgenerators.utilities.file_and_folder_operations import join, isdir, isfile, maybe_mkdir_p, save_json, load_pickle, subfiles
 from nnunet.evaluation.evaluator import aggregate_scores
 from nnunet.inference.segmentation_export import save_segmentation_nifti_from_softmax
 from nnunet.paths import default_plans_identifier, network_training_output_dir, default_cascade_trainer, default_trainer
-from nnunet.postprocessing.connected_components import determine_postprocessing
 from nnunet.training.model_restore import load_model_and_checkpoint_files
 from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
 
-import activations_extraction as act_ext
-from SDiceNiftiEvaluator import SDiceNiftiEvaluator
+import nnunet.training.network_training.masterarbeit.inference.activations_extraction as act_ext
+from nnunet.training.network_training.masterarbeit.inference.SDiceNiftiEvaluator import SDiceNiftiEvaluator
 
 def predict_preprocessed_ram(
     trainer,
     activations_extractor=None,
-    dataset_keys=None,
+    name_paths_dict: dict = {}, # { name: { 'preprocessed_file': '/abc/xyz.npz' } }
     do_mirroring: bool = True,
     use_sliding_window: bool = True,
     step_size: float = 0.5,
@@ -29,9 +26,6 @@ def predict_preprocessed_ram(
 ):
     assert trainer.network.training == False, "must set mode to eval"
     assert trainer.was_initialized, "must initialize, ideally with checkpoint (or train first)"
-    if trainer.dataset is None:
-        trainer.load_dataset()
-        trainer.do_split()
 
     if do_mirroring:
         if not trainer.data_aug_params['do_mirror']:
@@ -40,14 +34,11 @@ def predict_preprocessed_ram(
     else:
         mirror_axes = ()
 
-    if dataset_keys is None:
-        dataset_keys = trainer.dataset.keys()
-
     if activations_extractor is not None:
         activations_extractor.set_trainer(trainer)
 
-    for k in dataset_keys:
-        data = np.load(trainer.dataset[k]['data_file'])['data']
+    for name, paths in name_paths_dict.items():
+        data = np.load(paths['preprocessed_file'])['data']
 
         data[-1][data[-1] == -1] = 0
         if activations_extractor is None or not activations_extractor.is_active():
@@ -72,12 +63,12 @@ def predict_preprocessed_ram(
             activations_dict = activations_extractor.get_activations_dict()
 
         softmax_pred = softmax_pred.transpose([0] + [i + 1 for i in trainer.transpose_backward])
-        yield k, softmax_pred, activations_dict
+        yield name, softmax_pred, activations_dict
 
 def predict_preprocessed_fs(
     trainer,
     output_folder,
-    dataset_keys=None,
+    name_paths_dict: dict = {}, # { name: { 'preprocessed_file': '/abc/xyz.npz', 'gt_file': '/abc/xyz.nii.gz', 'properties_file': '/abc/xyz.pkl' } }
     do_mirroring: bool = True,
     use_sliding_window: bool = True,
     step_size: float = 0.5,
@@ -88,9 +79,7 @@ def predict_preprocessed_fs(
     debug: bool = False,
     all_in_gpu: bool = False,
     segmentation_export_kwargs: dict = None,
-    run_postprocessing_on_folds: bool = True,
     num_threads: int = 8,
-    save_original_gt: bool = False,
 ):
     """
     if debug=True then the temporary files generated for postprocessing determination will be kept
@@ -100,9 +89,6 @@ def predict_preprocessed_fs(
     trainer.network.eval()
 
     assert trainer.was_initialized, "must initialize, ideally with checkpoint (or train first)"
-    if trainer.dataset is None:
-        trainer.load_dataset()
-        trainer.do_split()
 
     if segmentation_export_kwargs is None:
         if 'segmentation_export_params' in trainer.plans.keys():
@@ -141,21 +127,20 @@ def predict_preprocessed_fs(
     export_pool = Pool(num_threads)
     results = []
 
-    for k, softmax_pred, activations_dict in predict_preprocessed_ram(
+    for name, softmax_pred, activations_dict in predict_preprocessed_ram(
         trainer=trainer,
         activations_extractor=act_ext.create_activations_extractor_from_env(),
-        dataset_keys=dataset_keys,
+        name_paths_dict=name_paths_dict,
         do_mirroring=do_mirroring,
         use_sliding_window=use_sliding_window,
         step_size=step_size,
         use_gaussian=use_gaussian,
         all_in_gpu=all_in_gpu
     ):
-        properties = load_pickle(trainer.dataset[k]['properties_file'])
-        fname = properties['list_of_data_files'][0].split("/")[-1][:-12]
-        if overwrite or (not isfile(join(output_folder_prediction, fname + ".nii.gz"))) or (save_softmax and not isfile(join(output_folder_prediction, fname + ".npz"))):
+        properties = load_pickle(name_paths_dict[name]['properties_file'])
+        if overwrite or (not isfile(join(output_folder_prediction, name + ".nii.gz"))) or (save_softmax and not isfile(join(output_folder_prediction, fname + ".npz"))):
             if save_softmax:
-                softmax_fname = join(output_folder_prediction, fname + ".npz")
+                softmax_fname = join(output_folder_prediction, name + ".npz")
             else:
                 softmax_fname = None
 
@@ -167,14 +152,14 @@ def predict_preprocessed_fs(
             then be read (and finally deleted) by the Process. save_segmentation_nifti_from_softmax can take either
             filename or np.ndarray and will handle this automatically"""
             if np.prod(softmax_pred.shape) > (2e9 / 4 * 0.85):  # *0.85 just to be save
-                np.save(join(output_folder_prediction, fname + ".npy"), softmax_pred)
-                softmax_pred = join(output_folder_prediction, fname + ".npy")
+                np.save(join(output_folder_prediction, name + ".npy"), softmax_pred)
+                softmax_pred = join(output_folder_prediction, name + ".npy")
 
             results.append(
                 export_pool.starmap_async(
                     save_segmentation_nifti_from_softmax,
                     (
-                        (softmax_pred, join(output_folder_prediction, fname + ".nii.gz"),
+                        (softmax_pred, join(output_folder_prediction, name + ".nii.gz"),
                         properties, interpolation_order, trainer.regions_class_order,
                         None, None,
                         softmax_fname, None, force_separate_z,
@@ -186,13 +171,13 @@ def predict_preprocessed_fs(
             results.append(export_pool.apply_async(
                 act_ext.save_activations_dict, (
                     activations_dict,
-                    join(output_folder_prediction, fname)
+                    join(output_folder_prediction, name)
                 )
             ))
 
         pred_gt_tuples.append([
-            join(output_folder_prediction, fname + ".nii.gz"),
-            join(trainer.gt_niftis_folder, fname + ".nii.gz")
+            join(output_folder_prediction, name + ".nii.gz"),
+            join(name_paths_dict[name]['gt_file'])
         ])
 
     _ = [i.get() for i in results]
@@ -212,51 +197,12 @@ def predict_preprocessed_fs(
         json_task=task, num_threads=num_threads
     )
 
-    if run_postprocessing_on_folds:
-        # in the old nnunet we would stop here. Now we add a postprocessing. This postprocessing can remove everything
-        # except the largest connected component for each class. To see if this improves results, we do this for all
-        # classes and then rerun the evaluation. Those classes for which this resulted in an improved dice score will
-        # have this applied during inference as well
-        trainer.print_to_log_file("determining postprocessing")
-        determine_postprocessing(
-            output_folder,
-            trainer.gt_niftis_folder,
-            folder_name_prediction,
-            final_subf_name=folder_name_prediction + "_postprocessed",
-            debug=debug
-        )
-        # after this the final predictions for the vlaidation set can be found in folder_name_prediction_base + "_postprocessed"
-        # They are always in that folder, even if no postprocessing as applied!
-
-    if save_original_gt:
-        # detemining postprocesing on a per-fold basis may be OK for this fold but what if another fold finds another
-        # postprocesing to be better? In this case we need to consolidate. At the time the consolidation is going to be
-        # done we won't know what trainer.gt_niftis_folder was, so now we copy all the niftis into a separate folder to
-        # be used later
-        gt_nifti_folder = join(trainer.output_folder_base, "gt_niftis")
-        maybe_mkdir_p(gt_nifti_folder)
-        for f in subfiles(trainer.gt_niftis_folder, suffix=".nii.gz"):
-            success = False
-            attempts = 0
-            e = None
-            while not success and attempts < 10:
-                try:
-                    shutil.copy(f, gt_nifti_folder)
-                    success = True
-                except OSError as e:
-                    attempts += 1
-                    sleep(1)
-            if not success:
-                print("Could not copy gt nifti file %s into folder %s" % (f, gt_nifti_folder))
-                if e is not None:
-                    raise e
-
     trainer.network.train(current_mode)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-k", '--dataset_keys_path', help="Path to a json list file. Must contain all keys for each patient", required=False, default=None)
+    parser.add_argument("-d", '--name_paths_dict', required=True, help="Path to a json object file. Must contain the full path to the preprocessed, gt, and properties file for each patient. e.g.: { key: { 'preprocessed_file': '/abc/xyz.npz', 'gt_file': '/abc/xyz.nii.gz', 'properties_file': '/abc/xyz.pkl' }, ... }")
     parser.add_argument('-o', "--output_folder", required=True, help="folder for saving predictions")
     parser.add_argument('-t', '--task_name', help='task name or task ID, required.',
                         default=default_plans_identifier, required=True)
@@ -381,19 +327,14 @@ def main():
     )
     trainer.load_checkpoint_ram(params[0], False)
     
-    dataset_keys = None
-    if args.dataset_keys_path is None:
-        print("full dataset used")
-    else:
-        print("loading keys from ", args.dataset_keys_path)
-        with open(args.dataset_keys_path) as f:
-            dataset_keys = json.load(f)
-            print(dataset_keys)
+    with open(args.name_paths_dict) as f:
+        name_paths_dict = json.load(f)
+        print(name_paths_dict.keys())
 
     predict_preprocessed_fs(
         trainer,
         output_folder,
-        dataset_keys=dataset_keys,
+        name_paths_dict=name_paths_dict,
         do_mirroring=not disable_tta,
         use_sliding_window=True,
         step_size=step_size,
@@ -404,9 +345,7 @@ def main():
         debug=False,
         all_in_gpu=all_in_gpu,
         segmentation_export_kwargs=None,
-        run_postprocessing_on_folds=False,
         num_threads=num_threads_nifti_save,
-        save_original_gt=False
     )
 
 
