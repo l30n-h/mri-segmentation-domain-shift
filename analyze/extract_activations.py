@@ -9,7 +9,7 @@ import helpers as hlp
 import json
 import os
 
-def store_activation_maps(task, trainers, fold_trains, epochs, output_directory_base='data/fig/activation_maps/'):
+def store_activation_maps(task, trainers, folds_train, epochs, output_directory_base='data/fig/activation_maps/'):
     batches_per_scan=24
     layers = hlp.get_layers_ordered()
     dataset_keys = [
@@ -44,7 +44,7 @@ def store_activation_maps(task, trainers, fold_trains, epochs, output_directory_
             activations_dict.items()
         ))
 
-    for trainer, fold_train, epoch in itertools.product(trainers, fold_trains, epochs):
+    for trainer, fold_train, epoch in itertools.product(trainers, folds_train, epochs):
     
         tmodel = hlp.load_model(trainer, fold_train, epoch)
         hlp.apply_prediction_data_filter_monkey_patch(tmodel, batches_per_scan=batches_per_scan)
@@ -122,12 +122,14 @@ def extract_featurewise_measurements(
     trainers,
     folds_train,
     epochs,
-    output_directory_base,
-    dataset_keys=None
+    output_directory_base
 ):
-    layers_set = set(hlp.get_layers_ordered())
+    SCANS_PER_FOLD=6
+    BATCHES_PER_SCAN=48
+    LAYERS = set(hlp.get_layers_ordered())
+
     def is_module_tracked(name, module):
-        return name in layers_set
+        return name in LAYERS
 
     def extract_activations_full(name, activations, slices_and_tiles_count, activations_dict):
         activations = activations[0]
@@ -203,9 +205,13 @@ def extract_featurewise_measurements(
     add_async_task, join_async_tasks = hlp.get_async_queue()
 
     for trainer, fold_train, epoch in itertools.product(trainers, folds_train, epochs):
+        scores = hlp.get_scores(task, trainer, fold_train, epoch)
+        scores = scores[(scores['fold_test'] == fold_train) | (~scores['is_validation'])]
+        dataset_keys = scores.sort_values('id').groupby(['fold_test', 'is_validation']).head(SCANS_PER_FOLD)['id_long']
+        
         tmodel = hlp.load_model(trainer, fold_train, epoch)
         
-        hlp.apply_prediction_data_filter_monkey_patch(tmodel, batches_per_scan=32)
+        hlp.apply_prediction_data_filter_monkey_patch(tmodel, batches_per_scan=BATCHES_PER_SCAN)
 
         for id, prediction, activations_dict in hlp.generate_predictions_ram(
             trainer=tmodel,
@@ -262,14 +268,14 @@ def load_data(task, trainer, fold_train, epoch, id_long):
         }
 
 
-def create_stats_scanwise(task, trainers, fold_trains, epochs):
+def create_stats_scanwise(task, trainers, folds_train, epochs):
     output_dir = 'data/csv/activations-misc'
     os.makedirs(output_dir, exist_ok=True)
 
     scores = pd.concat([
         hlp.get_scores(
             task, trainer, fold_train, epoch
-        ) for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs)
+        ) for trainer, fold_train, epoch in itertools.product(trainers, folds_train, epochs)
     ])
     
     stats = pd.DataFrame(itertools.chain.from_iterable([ 
@@ -331,18 +337,25 @@ def plot():
         },
     ).reset_index()
 
-    print(stats)
-
     layers_position_map = hlp.get_layers_position_map()
     layers_position_map['input'] = -2
     layers_position_map['gt'] = -1
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    stats['bn'] = stats['trainer'].str.contains('_bn')
+    stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
+    stats['optimizer_wd_bn'] = stats['optimizer'] + ' ' + stats['wd_bn']
     stats['same_domain'] = stats['fold_train'] == stats['fold_test']
     stats['domain_val'] = stats['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + stats['is_validation'].apply(lambda x: 'validation' if x else '')
+    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    
+    print(stats)
 
     output_dir = 'data/fig/activations-misc'
     os.makedirs(output_dir, exist_ok=True)
+
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+    
+    columns_measurements = list(map(lambda x: '{}_mean_mean'.format(x), columns))
 
     stats = stats[stats['epoch'].isin([10, 40, 120])]
     #stats = stats[stats['is_validation']]
@@ -350,99 +363,51 @@ def plot():
     stats = stats[~stats['layer'].str.startswith('seg_outputs')]
     stats = stats[~stats['layer'].str.startswith('tu')]
     
-    print(stats)
     stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'fold_test', 'domain_val']).agg(
         iou_score_mean=('iou_score_mean', 'first'),
         dice_score_mean=('dice_score_mean', 'first'),
         sdice_score_mean=('sdice_score_mean', 'first'),
+        optimizer=('optimizer', 'first'),
+        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
         **{
-            '{}_mean_mean'.format(column): ('{}_mean_mean'.format(column), 'mean') for column in columns
-        },
+            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements
+        }
     ).reset_index()
 
-    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
-    for column in columns:
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'meaned-single-{}_mean_mean-dice_score.png'.format(column)),
-            data=stats_meaned_over_layer,
-            kind='scatter',
-            x='{}_mean_mean'.format(column),
-            y='dice_score_mean',
-            hue='dice_score_mean',
-            palette='cool',
-            style='domain_val',
-            size='epoch',
-            aspect=2,
-            height=6,
-            #estimator=None,
-            #ci=None,
-        )
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'meaned-trainer-{}_mean_mean-dice_score.png'.format(column)),
-            data=stats_meaned_over_layer,
-            kind='scatter',
-            x='{}_mean_mean'.format(column),
-            y='dice_score_mean',
-            col='fold_train',
-            col_order=stats['fold_train'].sort_values().unique(),
-            row='trainer_short',
-            row_order=stats['trainer_short'].sort_values().unique(),
-            hue='dice_score_mean',
-            palette='cool',
-            style='domain_val',
-            size='epoch',
-            aspect=2,
-            height=6,
-            #estimator=None,
-            #ci=None,
-        )
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'layered-single-{}_mean_mean-dice_score.png'.format(column)),
-            data=stats,
-            kind='line',
-            x='layer_pos',
-            y='{}_mean_mean'.format(column),
-            hue='dice_score_mean',
-            palette='cool',
-            style='domain_val',
-            size='epoch',
-            aspect=2,
-            height=6,
-            #estimator=None,
-            #ci=None,
-        )
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'layered-trainer-{}_mean_mean-dice_score.png'.format(column)),
-            data=stats,
-            kind='line',
-            x='layer_pos',
-            y='{}_mean_mean'.format(column),
-            col='fold_train',
-            col_order=stats['fold_train'].sort_values().unique(),
-            row='trainer_short',
-            row_order=stats['trainer_short'].sort_values().unique(),
-            hue='dice_score_mean',
-            palette='cool',
-            style='domain_val',
-            size='epoch',
-            aspect=2,
-            height=6,
-            #estimator=None,
-            #ci=None,
-        )
+    for measurement, score in itertools.product(columns_measurements, ['dice_score_mean', 'sdice_score_mean']):
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score=score, yscale='log')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score, yscale='log')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer', score=score, yscale='log')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score, yscale='log')
+
+
     join_async_tasks()
 
 
 task = 'Task601_cc359_all_training'
 trainers = [
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
+
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
+
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -452,25 +417,21 @@ folds = [
     #'philips15',
     #'philips3'
 ]
-epochs = [10,20,30,40,80,120] #[40]
-dataset_keys = None
-with open('code/analyze/ids_small.json') as f:
-    dataset_keys = json.load(f)
+epochs = [10,20,30,40,80,120]
 
 
 # extract_featurewise_measurements(
 #     task=task,
 #     trainers=trainers,
-#     fold_trains=folds,
+#     folds_train=folds,
 #     epochs=epochs,
-#     output_directory_base='archive/old/nnUNet-container/data/measurements',
-#     dataset_keys=dataset_keys
-#)
+#     output_directory_base='archive/old/nnUNet-container/data/measurements2'
+# )
 
 # store_activation_maps(
 #     task=task,
 #     trainers=trainers,
-#     fold_trains=folds,
+#     folds_train=folds,
 #     epochs=epochs,
 #     output_directory_base='data/fig/activation_maps/'
 # )
@@ -478,7 +439,7 @@ with open('code/analyze/ids_small.json') as f:
 # create_stats_scanwise(
 #     task=task,
 #     trainers=trainers,
-#     fold_trains=folds,
+#     folds_train=folds,
 #     epochs=epochs,
 # )
 

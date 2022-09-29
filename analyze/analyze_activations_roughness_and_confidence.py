@@ -226,16 +226,17 @@ def load_data_live(task, trainer, fold_train, epoch, layers, dataset_keys, batch
 
 def generate_roughness_and_confidence_stats_per_model(task, trainer, fold_train, epoch, scores):
     # paper/code batchsize 45 (val 5, test 50) volsize [64,64,16] max_samples 80000 => per vol 80000/50 = 1600 patches => 1600/(64*64*16) = 0.024
-    # here batchsize 12 scans with 24 batches volsize [256,192] => 280000 ( > 0.02 * (256*192) * (12*24) ) needed?
-    SCANS_PER_FOLD=12
-    BATCHES_PER_SCAN=24
-    MAX_SAMPLES=80000
+    # here batchsize 6 scans with 48 batches volsize [256,192] => 280000 ( > 0.02 * (256*192) * (12*24) ) needed?
+    SCANS_PER_FOLD=6
+    BATCHES_PER_SCAN=48
+    MAX_SAMPLES=40000
     PCA_COMPONENTS=10 #0.8 #
     KMEANS_COMPONENTS=5
     LAYERS = list(filter(
         lambda x: '.lrelu' in x or 'tu.' in x or 'seg_outputs.3' in x,
         hlp.get_layers_ordered()
     ))
+    scores = scores[(scores['fold_test'] == fold_train) | (~scores['is_validation'])]
 
     def load_data(keys):
         return load_data_live(task, trainer, fold_train, epoch, LAYERS, keys, batches_per_scan=BATCHES_PER_SCAN)
@@ -275,16 +276,13 @@ def generate_roughness_and_confidence_stats_per_model(task, trainer, fold_train,
 
     manifolds_per_layer = dict(generate_manifolds_per_layer())
 
-    for (fold_test, is_validation) in itertools.product(
-            scores['fold_test'].unique(),
-            scores['is_validation'].unique()
-        ):
+    for (fold_test, is_validation) in scores[['fold_test', 'is_validation']].drop_duplicates().values.tolist():
         scores_sub = scores[
             (scores['fold_test'] == fold_test) & (scores['is_validation'] == is_validation)
         ].sort_values('id').head(SCANS_PER_FOLD)
         activations_dict = load_data(scores_sub['id_long'])
 
-        print('evaluate', fold_test)
+        print('evaluate', fold_test, is_validation)
         for layer_cur, (manifold_src, manifold_dst) in manifolds_per_layer.items():
             print(layer_cur)
             pca_src, kmeans_src, mixtures_src = manifold_src
@@ -375,7 +373,7 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
             os.path.join(
                 output_dir,
                 'activations-roughness-and-confidence-grouped-relu-and-residual{}-{}-{}-{}.csv'.format(
-                    '-pca10c-gt-s12-b24',#'',
+                    '-pca10c-gt-s6-b48-testaug',
                     trainer,
                     fold_train,
                     epoch
@@ -386,8 +384,18 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
 
 def plot_roughness_and_confidence_grouped():
     stats = pd.concat([
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s12-b24*.csv', recursive=False)
+        #pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s12-b24*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s6-b48-testaug*.csv', recursive=False)
     ]).reset_index(drop=True)
+
+    scores = pd.concat([
+        hlp.get_scores(
+            'Task601_cc359_all_training',
+            *ids
+        ) for ids in stats[['trainer', 'fold_train', 'epoch']].drop_duplicates().values.tolist()
+    ])[['trainer', 'optimizer', 'wd', 'DA', 'bn']].drop_duplicates().reset_index(drop=True)
+    stats = stats.join(scores.set_index('trainer'), on='trainer')
+
     stats.rename(columns={'name':'layer'}, inplace = True)
     layers_position_map = hlp.get_layers_position_map()
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
@@ -395,7 +403,8 @@ def plot_roughness_and_confidence_grouped():
     stats['same_domain'] = stats['fold_train'] == stats['fold_test']
     stats['trained_on'] = stats['same_domain'] & (~stats['is_validation'])
     stats['domain_val'] = stats['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + stats['is_validation'].apply(lambda x: 'validation' if x else '')
-
+    stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
+    stats['optimizer_wd_bn'] = stats['optimizer'] + ' ' + stats['wd_bn']
 
     stats_weights = pd.concat([
         pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
@@ -414,19 +423,10 @@ def plot_roughness_and_confidence_grouped():
         stats[column + '_spectral'] = stats[column] / stats['norm_spectral']
 
 
-    # stats = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'trained_on', 'layer', 'layer_pos']).agg(
-    #     'mean'
-    # ).reset_index()
-    # agg_ext = ['trained_on']
-    # style = 'trained_on'
-    # subdir = 'train-test-meaned'
 
-    agg_ext = ['fold_test', 'domain_val']
-    style = 'domain_val'
-    stats = stats[~stats['trainer'].str.contains('_bn')]
-    subdir = 'in/train-test-all'
-    # stats = stats[stats['trainer'].str.contains('_bn')]
-    # subdir = 'bn/train-test-all'
+    stats = stats[~stats['wd']]
+    #subdir = 'multi/train-test-all'
+    subdir = 'testaug'
 
     # TODO
     stats = stats[~stats['layer'].str.startswith('conv_blocks_context.0.blocks.0')]
@@ -447,7 +447,7 @@ def plot_roughness_and_confidence_grouped():
 
     add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
 
-    columns_scores = [
+    columns_measurements = [
         'roughness',
         #'confidence',
         'confidence_weighted',
@@ -458,7 +458,7 @@ def plot_roughness_and_confidence_grouped():
         #'confidence_spectral',
         #'confidence_weighted_spectral'
     ]
-    columns_train = [
+    columns_measurements_train = [
         'pca_src_noise_variance',
         #'pca_src_variance_ratio_cumsum_index_gt_90',
         #'pca_src_variance_ratio_cumsum_index_gt_95',
@@ -488,174 +488,59 @@ def plot_roughness_and_confidence_grouped():
         'norm_frob_weight',
         'norm_spectral',
     ]
-    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch', *agg_ext]).agg(
+    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'fold_test', 'domain_val']).agg(
         trained_on=('trained_on', 'first'),
         iou_score_mean=('iou_score_mean', 'first'),
         dice_score_mean=('dice_score_mean', 'first'),
         sdice_score_mean=('sdice_score_mean', 'first'),
+        optimizer=('optimizer', 'first'),
+        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
         **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_scores
+            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements
         },
         **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_train
+            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements_train
         }
     ).reset_index()
 
-    plot_settings = {
-        'ci': None,
-        'hue': 'iou_score_mean',
-        'palette': 'rainbow',
-        'aspect': 2,
-        'height': 6,
-    }
+    for measurement, score in itertools.product(columns_measurements, ['iou_score_mean', 'sdice_score_mean']):
+        print(measurement)
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score=score, palette='rainbow')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score, palette='rainbow')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer', score=score, palette='rainbow')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score, palette='rainbow')
 
-    for column in columns_scores:
-        print(column)
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'meaned-trainer-{}.png'.format(column)
-            ),
-            data=stats_meaned_over_layer,
-            kind='scatter',
-            x='{}_mean'.format(column),
-            y='iou_score_mean',
-            row='trainer_short',
-            row_order=stats_meaned_over_layer['trainer_short'].sort_values().unique(),
-            col='fold_train',
-            style=style,
-            size='epoch',
-            **plot_settings
-        )
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'meaned-single-{}.png'.format(column)
-            ),
-            data=stats_meaned_over_layer,
-            kind='scatter',
-            x='{}_mean'.format(column),
-            y='iou_score_mean',
-            style=style,
-            size='epoch',
-            **plot_settings
-        )
-
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'layered-trainer-{}.png'.format(column)
-            ),
-            data=stats,
-            kind='line',
-            x='layer_pos',
-            y=column,
-            row='trainer_short',
-            row_order=stats['trainer_short'].sort_values().unique(),
-            col='fold_train',
-            style=style,
-            #size='epoch',
-            **plot_settings
-        )
-
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'layered-single-{}.png'.format(column)
-            ),
-            data=stats,
-            kind='line',
-            x='layer_pos',
-            y=column,
-            style=style,
-            #size='epoch',
-            **plot_settings
-        )
+    
     
     stats_train = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'layer_pos']).agg(
         iou_score_mean=('iou_score_mean', 'mean'),
         dice_score_mean=('dice_score_mean', 'mean'),
         sdice_score_mean=('sdice_score_mean', 'mean'),
+        optimizer=('optimizer', 'first'),
+        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
         **{
-            column: (column, 'mean') for column in columns_train
+            column: (column, 'mean') for column in columns_measurements_train
         }
     ).reset_index()
     stats_train_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch']).agg(
         iou_score_mean=('iou_score_mean', 'mean'),
         dice_score_mean=('dice_score_mean', 'mean'),
         sdice_score_mean=('sdice_score_mean', 'mean'),
+        optimizer=('optimizer', 'first'),
+        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
         **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_train
+            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements_train
         }
     ).reset_index()
     print(stats_train)
     print(stats_train_meaned_over_layer)
-    for column in columns_train:
-        print(column)
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'meaned-trainer-{}.png'.format(column)
-            ),
-            data=stats_train_meaned_over_layer,
-            kind='scatter',
-            x='{}_mean'.format(column),
-            y='iou_score_mean',
-            row='trainer_short',
-            row_order=stats_train_meaned_over_layer['trainer_short'].sort_values().unique(),
-            col='fold_train',
-            size='epoch',
-            **plot_settings
-        )
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'meaned-single-{}.png'.format(column)
-            ),
-            data=stats_train_meaned_over_layer,
-            kind='scatter',
-            x='{}_mean'.format(column),
-            y='iou_score_mean',
-            size='epoch',
-            **plot_settings
-        )
 
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'layered-trainer-{}.png'.format(column)
-            ),
-            data=stats_train,
-            kind='line',
-            x='layer_pos',
-            y=column,
-            row='trainer_short',
-            row_order=stats_train['trainer_short'].sort_values().unique(),
-            col='fold_train',
-            #size='epoch',
-            **plot_settings
-        )
-
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'layered-single-{}.png'.format(column)
-            ),
-            data=stats_train,
-            kind='line',
-            x='layer_pos',
-            y=column,
-            #size='epoch',
-            **plot_settings
-        )
+    # for measurement, score in itertools.product(columns_measurements_train, ['iou_score_mean', 'sdice_score_mean']):
+    #     print(measurement)
+    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row=None, score=score)
+    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score)
+    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row='optimizer', score=score)
+    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score)
 
     join_async_tasks()
 
@@ -670,13 +555,21 @@ trainers = [
 
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
 
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',

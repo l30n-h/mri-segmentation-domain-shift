@@ -1,8 +1,12 @@
 import os
+import glob
 import pandas as pd
 import numpy as np
 import torch
 import re
+import itertools
+import json
+import io
 from multiprocessing import Pool
 from functools import lru_cache
 from nnunet.training.model_restore import load_model_and_checkpoint_files
@@ -127,11 +131,12 @@ def get_layer_config(layer_name):
 
 def get_trainer_short(x):
     DA = re.search(r'_(noDA|nogamma|nomirror|norotation|noscaling)', x)
-    return '{}_wd={}_bn={}_DA={}'.format(
+    return '{}_wd={}_bn={}_DA={}_depth={}'.format(
         'SGD' if 'SGD' in x else 'Adam',
         '_wd0' not in x,
         '_bn' in x,
-        'full' if DA is None else DA.group(1).replace('noDA', 'none')
+        'full' if DA is None else DA.group(1).replace('noDA', 'none'),
+        '7' if 'depth7' in x else '5'
     )
 
 
@@ -161,7 +166,7 @@ def load_split(task, fold):
 def get_id_from_filename(filename):
     return filename.split('_', 1)[0]
 
-def get_testdata_dir(task, trainer, fold_train, epoch, folder_test='archive/old/nnUNet-container/data/testout'):
+def get_testdata_dir(task, trainer, fold_train, epoch, folder_test='archive/old/nnUNet-container/data/testout2'):
     tester = trainer.replace('nnUNetTrainerV2_', '').replace('__nnUNetPlansv2.1', '')
     directory_testout = os.path.join(
         folder_test,
@@ -172,10 +177,10 @@ def get_testdata_dir(task, trainer, fold_train, epoch, folder_test='archive/old/
 
 
 
-def load_model(trainer, fold, epoch, models_base_dir='archive/old/nnUNet-container/data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training', eval=True):
+def load_model(trainer, fold_train, epoch, models_base_dir='archive/old/nnUNet-container/data/nnUNet_trained_models/nnUNet/2d/Task601_cc359_all_training', eval=True):
     tmodel, params = load_model_and_checkpoint_files(
         os.path.join(models_base_dir, trainer),
-        get_fold_id_mapping()[fold],
+        get_fold_id_mapping()[fold_train],
         mixed_precision=True,
         checkpoint_name='model_ep_{:0>3}'.format(epoch)
     )
@@ -184,14 +189,68 @@ def load_model(trainer, fold, epoch, models_base_dir='archive/old/nnUNet-contain
     if eval == True:
         tmodel.network.eval()
     return tmodel
+    
+def get_name_paths_dict():
+    base_path_preprocessed = 'archive/old/nnUNet-container/data/nnUNet_preprocessed/Task601_cc359_all_training'
+    base_path_augmented = 'archive/old/nnUNet-container/data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training/augmented'
+    def get_name_from_preprocessed_path(path):
+        filename_without_ext, ext = os.path.basename(path).split('.', 1)
+        preprocessed_dir = os.path.dirname(path)
+        return (
+            filename_without_ext,
+            { 
+                "preprocessed_file": path,
+                "gt_file": os.path.join(os.path.dirname(preprocessed_dir), 'gt_segmentations', '{}.nii.gz'.format(filename_without_ext)),
+                "properties_file": os.path.join(preprocessed_dir, '{}.pkl'.format(filename_without_ext))
+            }
+        )
+    def get_name_augmented_from_preprocessed_path(path):
+        filename_without_ext, ext = os.path.basename(path).split('.', 1)
+        preprocessed_dir = os.path.dirname(path)
+        augmentation_dir = os.path.basename(os.path.dirname(preprocessed_dir))
+        return (
+            '{}_{}'.format(filename_without_ext, augmentation_dir),
+            { 
+                "preprocessed_file": path,
+                "gt_file": os.path.join(os.path.dirname(preprocessed_dir), 'labelsTs', '{}.nii.gz'.format(filename_without_ext)),
+                "properties_file": os.path.join(preprocessed_dir, '{}.pkl'.format(filename_without_ext))
+            }
+        )
+    return dict(itertools.chain(
+        map(
+            get_name_from_preprocessed_path,
+            glob.iglob(os.path.join(base_path_preprocessed, 'nnUNetData_plans_v2.1_stage0', '*.npz'))
+        ),
+        map(
+            get_name_augmented_from_preprocessed_path,
+            glob.iglob(os.path.join(base_path_augmented, '*', 'preprocessed', '*.npz'))
+        )  
+    ))
+
+def get_name_paths_dict_small():
+    splits_all = load_split_all('Task601_cc359_all_training')
+    dataset_keys_small_set = set(
+        sum(map(lambda x: sorted(x['train'])[:6], splits_all), [])
+    ).union(set(
+        sum(map(lambda x: x['val'], splits_all), [])
+    ))
+    regex = re.compile(r'^(CC\d{4}_[^_]+_\d+_\d+_[FM])')
+    return dict(filter(
+        lambda x: re.search(regex, x[0]).group(1) in dataset_keys_small_set,
+        get_name_paths_dict().items()
+    ))
 
 def generate_predictions_ram(trainer, dataset_keys=None, activations_extractor_kwargs={}):
+    name_paths_dict = get_name_paths_dict()
+    if dataset_keys is not None:
+        dataset_keys_set = set(dataset_keys)
+        name_paths_dict = dict(filter(lambda x: x[0] in dataset_keys_set, name_paths_dict.items()))
     return predict_preprocessed_ram(
         trainer=trainer,
         activations_extractor=act_ext.activations_extractor(
             **activations_extractor_kwargs
         ),
-        dataset_keys=dataset_keys,
+        name_paths_dict=name_paths_dict,
         do_mirroring=False,
         # use_sliding_window=True,
         # step_size=0.5,
@@ -204,7 +263,7 @@ def extract_central_patch(trainer, data, batches_per_scan=64):
     patch_size = np.array(trainer.patch_size)
     start = (data_size // 2 - np.array(trainer.patch_size) // 2).clip(np.array([0, 0]), data_size)
     end = (start + patch_size).clip(np.array([0, 0]), data_size)
-    batches = np.linspace(0, data.shape[1] - 1, batches_per_scan).astype(int)
+    batches = np.linspace(0, data.shape[1] - 1, min(batches_per_scan, data.shape[1])).astype(int)
     return data[:, batches, start[0] : end[0], start[1] : end[1]]
 
 def apply_prediction_data_filter_monkey_patch(trainer, batches_per_scan=64):
@@ -253,33 +312,102 @@ def get_activations_dict_memsize_estimate(activations_dict):
     return sum(map(get_tensor_memsize_estimate, activations_dict.values()))
 
 
+def load_json(path):
+    with open(path) as f:
+        return json.load(f)
+
+def get_summary_scores(task, trainer, fold_train, epoch, **kwargs):
+    try:
+        data = load_json(
+            os.path.join(
+                get_testdata_dir(task, trainer, fold_train, epoch, **kwargs),
+                'prediction_raw',
+                'summary.json'
+            )
+        )
+        def extract(data):
+            # available_fields = [
+            #     'Accuracy',
+            #     'Dice',
+            #     'False Discovery Rate',
+            #     'False Negative Rate',
+            #     'False Omission Rate',
+            #     'False Positive Rate',
+            #     'Jaccard',
+            #     'Negative Predictive Value',
+            #     'Precision',
+            #     'Recall',
+            #     'Total Positives Reference',
+            #     'Total Positives Test',
+            #     'True Negative Rate',
+            #     'SDice',
+            # ]
+            data_foreground = data['1']
+            id_long, id_short, tomograph_model, tesla_value, age, gender = re.search(
+                r'/((CC\d{4})_([^_]+)_(\d+)_(\d+)_([FM]))',
+                data['reference']
+            ).groups()
+            test_augmentation = re.search(r'/augmented/([^/]+)', data['reference'])
+            if test_augmentation is not None:
+                test_augmentation = test_augmentation.group(1)
+                id_long = '{}_{}'.format(id_long, test_augmentation)
+            return {
+                'id': id_short,
+                'id_long': id_long,
+                'trainer': trainer,
+                'fold_train': fold_train,
+                'epoch': epoch,
+                'tomograph_model': tomograph_model,
+                'tesla_value': int(tesla_value),
+                # 'age': age,
+                # 'gender': gender,
+                'fold_test': tomograph_model + tesla_value + ('' if test_augmentation is None else '_' + test_augmentation),
+                'test_augmentation': test_augmentation,
+                'dice_score': data_foreground['Dice'],
+                'iou_score': data_foreground['Jaccard'],
+                'sdice_score': data_foreground['SDice']
+                #**data_foreground
+            }
+        return pd.read_json(
+            io.StringIO(json.dumps(list(map(extract, data['results']['all']))))
+        )
+    except FileNotFoundError:
+        return pd.DataFrame()
+
 def get_scores(task, trainer, fold_train, epoch, **kwargs):
     directory_testout = get_testdata_dir(task, trainer, fold_train, epoch, **kwargs)
-    scores = pd.read_csv(os.path.join(directory_testout, 'scores.csv'))
-    
-    #todo should be set in calc_score
-    scores.drop('Unnamed: 0', axis='columns', inplace=True)
-    scores['trainer'] = trainer
-    scores['epoch'] = epoch
-    scores['fold_train'] = fold_train
-    scores['fold'] = scores['tomograph_model'].str.cat(scores['tesla_value'].astype(str))
-    scores.rename(columns={ 'fold': 'fold_test' }, inplace=True)
     
     splits_all = load_split_all(task)
-    id_idlong_map = dict(map(
-        lambda x: (get_id_from_filename(x), x),
-        sum(map(lambda x: x['train'] + x['val'], splits_all), [])
-    ))
-    scores['id_long'] = scores['id'].apply(lambda x: id_idlong_map.get(x, None))
 
+    #TODO remove csv loading in future!!
+    scores_csv_path = os.path.join(directory_testout, 'scores.csv')
+    if os.path.exists(scores_csv_path):
+        scores = pd.read_csv(scores_csv_path)
+        scores.drop(['Unnamed: 0', 'fold', 'fold_test'], axis='columns', inplace=True, errors='ignore')
+        scores['trainer'] = trainer
+        scores['epoch'] = epoch
+        scores['fold_train'] = fold_train
+        scores['fold_test'] = scores['tomograph_model'].str.cat(scores['tesla_value'].astype(str))
+        scores['test_augmentation'] = None
+        id_idlong_map = dict(map(
+        lambda x: (get_id_from_filename(x), x),
+            sum(map(lambda x: x['train'] + x['val'], splits_all), [])
+        ))
+        scores['id_long'] = scores['id'].apply(lambda x: id_idlong_map.get(x, None))
+        scores['iou_score'] = scores['dice_score'].apply(dice_to_iou)
+    else:
+        scores = get_summary_scores(task, trainer, fold_train, epoch, **kwargs)
+    if scores.empty:
+        return scores
+    
     val_set = set(sum(map(lambda x: x['val'], splits_all), []))
     scores['is_validation'] = scores['id_long'].apply(lambda x: x in val_set)
     
-    scores['iou_score'] = scores['dice_score'].apply(dice_to_iou)
     scores['optimizer'] = scores['trainer'].str.replace(r'^.*?(SGD|$).*$', lambda m: m.group(1) or 'Adam', n=1, regex=True)
     scores['wd'] = ~scores['trainer'].str.contains('wd0')
     scores['DA'] = scores['trainer'].str.replace(r'^.*?(noDA|nogamma|nomirror|norotation|noscaling|$).*$', lambda m: m.group(1) or 'full', n=1, regex=True).str.replace('noDA', 'none')
     scores['bn'] = scores['trainer'].str.contains('_bn')
+    scores['test_augmentation'] = scores['test_augmentation'].fillna('None')
     return scores
 
 def load_domainshift_scores(task, trainer, fold_train, epoch):
@@ -312,6 +440,8 @@ def load_domainshift_scores(task, trainer, fold_train, epoch):
 
 
 import seaborn
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 seaborn.set_style('darkgrid')
 def relplot_and_save(outpath, xscale='linear', yscale='linear', *args, **kwargs):
     print(outpath)
@@ -326,6 +456,117 @@ def relplot_and_save(outpath, xscale='linear', yscale='linear', *args, **kwargs)
         bbox_inches='tight',
         pad_inches=0
     )
+    plt.close(g.fig)
+
+from scipy.stats import kendalltau, pearsonr, spearmanr
+
+def kendall_pval(x,y):
+    return kendalltau(x,y)[1]
+
+def pearsonr_pval(x,y):
+    return pearsonr(x,y)[1]
+
+def spearmanr_pval(x,y):
+    return spearmanr(x,y)[1]
+
+def get_corr_stats(stats, groupby, columns):
+    column_combinations = list(itertools.combinations(columns, 2))
+    if len(groupby) == 0:
+        stats = stats.assign(_='all')
+        groupby = ['_']
+    grouped = stats.groupby(groupby)
+    count = grouped[columns[0]].agg(num_samples='count')
+    corr = grouped[columns].corr(method='pearson').unstack()[column_combinations]
+    pval = grouped[columns].corr(method=pearsonr_pval).unstack()[column_combinations]
+    corr.columns = corr.columns.to_flat_index().map('-'.join).map(lambda x: '{}_corr'.format(x))
+    pval.columns = pval.columns.to_flat_index().map('-'.join).map(lambda x: '{}_pval'.format(x))
+    corr = corr.join(pval).join(count).round(2)
+    #corr_summarized = None
+    # if len(groupby) > 1:
+    #     corr_summarized = corr.groupby(groupby[:-1]).agg(
+    #         ['mean', 'std', 'min', 'max']
+    #     ).round(2)
+    return [corr]#, corr_summarized
+
+def plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score='iou_score_mean', palette='cool', yscale='linear'):
+    suffix = 'single' if row is None else row
+    add_async_task(
+        relplot_and_save,
+        outpath=os.path.join(
+            output_dir,
+            '{}-{}-meaned-{}.png'.format(measurement, score, suffix)
+        ),
+        data=stats_meaned_over_layer,
+        kind='scatter',
+        x='{}_mean'.format(measurement),
+        y=score,
+        row=row,
+        row_order=None if row is None else stats_meaned_over_layer[row].sort_values().unique(),
+        col='fold_train',
+        col_order=stats_meaned_over_layer['fold_train'].sort_values().unique(),
+        style='domain_val' if 'domain_val' in stats_meaned_over_layer else None,
+        size='epoch',
+        hue=score,
+        palette=palette,
+        aspect=2,
+        height=6,
+    )
+    add_async_task(
+        relplot_and_save,
+        outpath=os.path.join(
+            output_dir,
+            '{}-{}-layered-{}.png'.format(measurement, score, suffix)
+        ),
+        data=stats,
+        kind='line',
+        x='layer_pos',
+        y=measurement,
+        row=row,
+        row_order=None if row is None else stats[row].sort_values().unique(),
+        col='fold_train',
+        col_order=stats['fold_train'].sort_values().unique(),
+        style='domain_val' if 'domain_val' in stats else None,
+        errorbar=None,
+        hue=score,
+        palette=palette,
+        aspect=2,
+        height=6,
+        yscale=yscale,
+    )
+
+    # measurements_meaned = ['{}_mean'.format(measurement), score, 'epoch']
+    # measurements_layered = [measurement, score, 'epoch']
+    
+    # groupby = ([] if row is None else [row])
+
+    # print('\n'.join([
+    #     '{}-{}-meaned-{}'.format(measurement, score, suffix),
+    #     *list(map(
+    #         lambda x: x.to_string(),
+    #         get_corr_stats(stats_meaned_over_layer, groupby, measurements_meaned)
+    #     ))
+    # ]))
+    # print('\n'.join([
+    #     '{}-{}-meaned-{}_fold_train'.format(measurement, score, suffix),
+    #     *list(map(
+    #         lambda x: x.to_string(),
+    #         get_corr_stats(stats_meaned_over_layer, groupby + ['fold_train'], measurements_meaned)
+    #     ))
+    # ]))
+    # print('\n'.join([
+    #     '{}-{}-layered-{}'.format(measurement, score, suffix),
+    #     *list(map(
+    #         lambda x: x.to_string(),
+    #         get_corr_stats(stats, ['layer_pos'] + groupby, measurements_layered)
+    #     ))
+    # ]))
+    # # print('\n'.join([
+    # #     '{}-{}-layered-{}_fold_train'.format(measurement, score, suffix),
+    # #     *list(map(
+    # #         lambda x: x.to_string(),
+    # #         get_corr_stats(stats, ['layer_pos'] + groupby + ['fold_train'], measurements_layered)
+    # #     ))
+    # # ]))
 
 def numerate_nested(df, columns, column_name_out='x'):
     grouped = df[columns].groupby(columns[0:-1])
@@ -337,8 +578,6 @@ def numerate_nested(df, columns, column_name_out='x'):
         on=columns
     )
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 def create_plot(
     df,
     column_x,
