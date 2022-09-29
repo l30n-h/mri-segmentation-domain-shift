@@ -18,7 +18,9 @@ trainers=(
   # "MA_noscheduler_depth5_wd0_bn_ep120_noDA"
   # "MA_noscheduler_depth5_wd0_bn_SGD_ep120"
   # "MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA"
+
   # "MA_noscheduler_depth7_bf24_wd0_ep360_noDA"
+  # "MA_noscheduler_depth5_ep360_noDA"
 )
 declare -A fold_id_mapping
 fold_id_mapping['siemens15']=0
@@ -43,16 +45,15 @@ do
 
     for epoch in "${epochs[@]}"
     do
-      if test "$(jobs | wc -l)" -ge 2; then
+      if test "$(jobs | wc -l)" -ge 3; then
         wait -n
       fi
       {
         folder_name="${trainer}-ep${epoch}-${fold_name}"
         testout_dir="data/testout/${folder_name}"
         mkdir ${testout_dir}
-        #python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_simple.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -i data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training/imagesTs/ -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
-        python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_preprocessed.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4
-        mv ${testout_dir} archive/old/nnUNet-container/data/testout/Task601_cc359_all_training/
+        python code/nnUNet/nnunet/training/network_training/masterarbeit/inference/predict_preprocessed.py -f ${fold_id} -o ${testout_dir} -tr nnUNetTrainerV2_${trainer} -t Task601_cc359_all_training -m 2d -chk model_ep_${epoch} --disable_tta --num_threads_nifti_save=4 -d code/analyze/name_paths_dict_small.json
+        mv ${testout_dir} archive/old/nnUNet-container/data/testout2/Task601_cc359_all_training/
       } &
     done
     wait

@@ -38,6 +38,7 @@ def predict_preprocessed_ram(
         activations_extractor.set_trainer(trainer)
 
     for name, paths in name_paths_dict.items():
+        print(name, paths['preprocessed_file'])
         data = np.load(paths['preprocessed_file'])['data']
 
         data[-1][data[-1] == -1] = 0
@@ -329,7 +330,7 @@ def main():
     
     with open(args.name_paths_dict) as f:
         name_paths_dict = json.load(f)
-        print(name_paths_dict.keys())
+        print("# scans to predict:", len(name_paths_dict.keys()))
 
     predict_preprocessed_fs(
         trainer,
