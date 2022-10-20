@@ -14,7 +14,6 @@ sys.path.append(os.path.join(parent, 'lipEstimation'))
 import lipschitz_approximations as lipapp
 import lipschitz_utils as liputils
 
-fold_id_mapping = hlp.get_fold_id_mapping()
 
 def get_weights_noise_estimate(weights):
     a = weights.reshape(
@@ -69,7 +68,6 @@ def generate_stats_weights(parameters):
         # features_flat_norm = (features_flat_norm/features_flat_normed.shape[1])
         # a = torch.cat((features_flat_normed, features_flat_norm), dim=1)
         similarity_matrix = hlp.get_cosine_similarity(a, a)
-        #similarity_matrix = hlp.get_l2_similarity(a, a)
 
         diagonal = similarity_matrix.diagonal()
         diagonal_zero = (diagonal < 0.001).count_nonzero().float()
@@ -201,7 +199,6 @@ def plot_weight_stats():
     stats = pd.concat([
         pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
     ]).reset_index(drop=True)
-
     index = ['trainer', 'fold_train', 'epoch']
     scores = pd.concat([
         hlp.get_scores(
@@ -209,7 +206,9 @@ def plot_weight_stats():
             *ids
         ) for ids in stats[index].drop_duplicates().values.tolist()
     ]).reset_index(drop=True)
-    scores = scores.groupby(index).agg(
+    scores['same_domain'] = scores['fold_train'] == scores['fold_test']
+    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + scores['is_validation'].apply(lambda x: 'validation' if x else '')
+    scores = scores.groupby([*index, 'domain_val']).agg(
         optimizer=('optimizer', 'first'),
         wd=('wd', 'first'),
         DA=('DA', 'first'),
@@ -221,16 +220,15 @@ def plot_weight_stats():
         sdice_score_mean=('sdice_score', 'mean'),
         sdice_score_std=('sdice_score', 'std')
     ).reset_index()
-
-    stats = stats.join(scores.set_index(index), on=index)
+    stats = scores.join(stats.set_index(index), on=index)
 
     stats.rename(columns={ 'name': 'layer' }, inplace=True)
     layers_position_map = hlp.get_layers_position_map()
     stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
-
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)    
     stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
-
+    stats['optimizer_wd_bn'] = stats['optimizer'] + ' ' + stats['wd_bn']
+    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
+    
     stats['stable_rank'] = (stats['norm_frob_weight'] ** 2) / ((stats['norm_spectral'] ** 2) + 0.00001)
     
     stats_base = stats
@@ -241,148 +239,65 @@ def plot_weight_stats():
 
     add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
 
-
-    columns = [
-        'stable_rank',
-        *list(filter(lambda c: any(s in c for s in [
-            'norm_',
-            'features',
-            'similarity',
-        ]), stats.columns.values.tolist()))
-    ]
-    print(columns)
-
-    stats = stats_base.copy()
-    print(stats)
+    #stats = stats[stats['domain_val'] == 'same validation']
+    stats = stats[stats['domain_val'] == 'other ']
+    stats = stats[~stats['wd']]
     stats = stats[stats['layer_pos'] >= 0]
     stats = stats[~stats['layer'].str.endswith('.lrelu')]
     stats = stats[~stats['layer'].str.endswith('.instnorm')]
-    for column in columns:
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(
-                output_dir,
-                'weights-layer_pos-{}-dice_score-trainer_short.png'.format(column)
-            ),
-            data=stats,
-            kind='line',
-            x='layer_pos',
-            y=column,
-            col='fold_train',
-            col_order=stats['fold_train'].sort_values().unique(),
-            row='trainer_short',
-            row_order=stats['trainer_short'].sort_values().unique(),
-            hue='dice_score_mean',
-            palette='cool',
-            #style='fold_train',
-            size='epoch',
-            height=6,
-            aspect=2,
-            estimator=None,
-            ci=None,
-            facet_kws=dict(
-                sharey='row'
-            )
-        )
+    #stats = stats[(stats['bn']) | (~stats['layer'].str.endswith('.instnorm'))]
+    print(stats)
 
+    columns_measurements = [
+        'stable_rank',
+        'norm_frob_weight',
+        'norm_spectral'
+        # *list(filter(lambda c: any(s in c for s in [
+        #     'norm_',
+        #     # 'features',
+        #     # 'similarity',
+        # ]), stats.columns.values.tolist()))
+    ]
+    print(columns_measurements)
 
-    # stats = stats_base.copy()
-    # stats['layer'] = stats['layer'].fillna('all')
-    # stats = stats[~stats['layer'].str.endswith('.lrelu')]
-    # for layer in stats['layer'].drop_duplicates():
-    #     stats_l = stats[stats['layer'] == layer]
-    #     add_async_task(
-    #             hlp.relplot_and_save,
-    #             outpath=os.path.join(
-    #                 output_dir,
-    #                 'weights-norm_spectral-dice_score-trainer_short-{}.png'.format(layer)
-    #             ),
-    #             data=stats_l,
-    #             kind='scatter',
-    #             x='norm_spectral',
-    #             y='dice_score_mean',
-    #             col='optimizer',
-    #             col_order=stats['optimizer'].sort_values().unique(),
-    #             row='wd_bn',
-    #             row_order=stats['wd_bn'].sort_values().unique(),
-    #             hue='fold_train',
-    #             #palette='cool',
-    #             style='DA',
-    #             size='epoch',
-    #             height=6,
-    #             aspect=2,
-    #             estimator=None,
-    #             ci=None,
-    #         )
+    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch']).agg(
+        iou_score_mean=('iou_score_mean', 'first'),
+        dice_score_mean=('dice_score_mean', 'first'),
+        sdice_score_mean=('sdice_score_mean', 'first'),
+        optimizer=('optimizer', 'first'),
+        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
+        **{
+            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements
+        }
+    ).reset_index()
+
+    for measurement, score in itertools.product(columns_measurements, ['dice_score_mean', 'sdice_score_mean']):
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score=score, yscale='log')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score, yscale='log')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer', score=score, yscale='log')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score, yscale='log')
     
     join_async_tasks()
 
 
-def plot_weights(trainers, folds, epochs):
-    layers_position_map = hlp.get_layers_position_map()
-    for trainer, fold_train, epoch in itertools.product(trainers, folds, epochs):
-        print(trainer, fold_train, epoch)
-
-        tmodel = hlp.load_model(trainer, fold_train, epoch)
-        parameters_dict = dict(tmodel.network.named_parameters())
-
-        for name, parameters in parameters_dict.items():
-            if len(parameters.shape) < 4:
-                print(name)
-                continue
-            layer_id = layers_position_map.get(name.replace('.weight', ''))
-            merged = torch.nn.functional.pad(
-                parameters,
-                (2,2,2,2)
-            ).swapaxes(
-                0,
-                1
-            ).flatten(
-                start_dim=1,
-                end_dim=2
-            ).swapaxes(
-                0,
-                1
-            ).flatten(
-                start_dim=1,
-                end_dim=2
-            )
-            mval = merged.abs().max()
-            plt.imsave(
-                'data/fig/weights_pure-{}-{}-{}-{}.jpg'.format(
-                    trainer, fold_train, epoch, layer_id
-                ),
-                merged,
-                vmin=-mval,
-                vmax=mval
-            )
-
-            # fig, axes = plt.subplots(figsize=(32, 24), nrows=1, ncols=1)
-            # axes.imshow(merged, cmap='viridis', interpolation='none')
-            # #axes.colorbar()
-
-            # fig.savefig('data/fig/weights_pure-{}-{}-{}-{}.jpg'.format(
-            #     trainer, fold_train, epoch, layer_id
-            # ))
-            # plt.close(fig)
-        
-
-
 trainers = [
-    'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
-    
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
 
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
-    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -397,5 +312,3 @@ epochs = [10, 20, 30, 40, 80, 120]
 #calc_weight_stats(trainers, folds, epochs)
 
 plot_weight_stats()
-
-#plot_weights(trainers, folds, epochs)

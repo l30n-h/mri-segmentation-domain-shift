@@ -37,7 +37,7 @@ def plot_scores_full_small_compare(task, trainers, folds, epochs):
         sdice_score_std=('sdice_score', 'std')
     ).reset_index()
     scores['same_domain'] = scores['fold_train'] == scores['fold_test']
-    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + scores['is_validation'].apply(lambda x: 'validation' if x else '')
+    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
     scores['trainer_short'] = scores['trainer'].apply(hlp.get_trainer_short)
 
     scores = scores[scores['same_domain'] | (~scores['is_validation'])]
@@ -98,6 +98,7 @@ def plot_scores(task, trainers, folds, epochs):
     ]).reset_index(drop=True)
 
     scores = scores.groupby(['trainer', 'fold_train', 'epoch', 'fold_test', 'is_validation']).agg(
+        fold_test_base=('fold_test_base', 'first'),
         optimizer=('optimizer', 'first'),
         wd=('wd', 'first'),
         DA=('DA', 'first'),
@@ -117,191 +118,210 @@ def plot_scores(task, trainers, folds, epochs):
     scores['optimizer_DA'] = scores['optimizer'] + ' ' + scores['DA']
     scores['wd_bn_DA'] = scores['wd_bn'] + ' ' + scores['DA']
     scores['same_domain'] = scores['fold_train'] == scores['fold_test']
-    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + scores['is_validation'].apply(lambda x: 'validation' if x else '')
+    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
+    scores['domain_val_testaug'] = scores['domain_val'] + scores['test_augmentation'].apply(lambda x: '' if x == 'None' else ' testaug')
     scores['trainer_short'] = scores['trainer'].apply(hlp.get_trainer_short)
 
+    scores['same_base_domain'] = scores['fold_train'] == scores['fold_test_base']
+    scores['base_domain_val'] = scores['same_base_domain'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
 
     scores = scores[scores['same_domain'] | (~scores['is_validation'])]
+    #scores = scores[scores['same_base_domain'] | (~scores['is_validation'])]
     #scores = scores[scores['test_augmentation'] == 'None']
+    scores['Data Aug.'] = scores['DA'].str.replace(r'^no([^n].+)$', r'no-\1', n=1, regex=True)
+    scores['Domain'] = scores['domain_val_testaug'].str.replace('same validation', 'Validation').str.replace('same', 'Training').str.replace('other testaug', 'Other w/ test aug.').str.replace('other', 'Other w/o test aug.')
+    scores['Optimizer'] = scores['optimizer']
+    scores['DSC'] = scores['dice_score_mean']
+    scores['Surface DSC'] = scores['sdice_score_mean']
+    scores['Epoch'] = scores['epoch']
+    scores['Normalization'] = scores['bn'].apply(lambda x: 'Batch' if x else 'Instance')
+
+    scores = scores[~scores['wd']]
 
     print(scores)
 
-    #output_dir = 'data/fig/scores/scores-overfit'
     output_dir = 'data/fig/scores/scores-testaug'
-    #output_dir = 'data/fig/scores/scores-testaug-none'
     os.makedirs(output_dir, exist_ok=True)
-
-    
+    columns = ['DSC', 'Surface DSC']
     add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
 
-    aggs = ['mean', 'std']
-    for agg in aggs:
+    for column in columns:
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-scores-{}.png'.format(agg)),
-            data=scores.melt(
-                'dice_score_{}'.format(agg),
-                value_vars=[
-                    'iou_score_{}'.format(agg),
-                    'sdice_score_{}'.format(agg)
-                ],
-                var_name='score_{}'.format(agg),
-                value_name='score_value_{}'.format(agg)
-            ),
+            outpath=os.path.join(output_dir, 'scores-DA-no_bn-epoch-{}.png'.format(column)),
+            data=scores[~scores['bn']],
             kind='line',
-            x='dice_score_{}'.format(agg),
-            y='score_value_{}'.format(agg),
-            hue='score_{}'.format(agg),
-            errorbar=None,
+            x='Epoch',
+            y=column,
+            col='Optimizer',
+            style='Domain',
+            hue='Data Aug.',
+            height=6,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-DA-Normalization-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['Data Aug.'].isin(['full', 'none'])],
+            kind='line',
+            x='Epoch',
+            y=column,
+            col='Normalization',
+            style='Domain',
+            hue='Data Aug.',
+            height=6,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-DA-Optimizer-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['Data Aug.'].isin(['full', 'none'])],
+            kind='line',
+            x='Epoch',
+            y=column,
+            col='Optimizer',
+            style='Domain',
+            hue='Data Aug.',
+            height=6,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-DA-Optimizer-Normalization-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['Data Aug.'].isin(['full', 'none'])],
+            kind='line',
+            x='Epoch',
+            y=column,
+            row='Optimizer',
+            col='Normalization',
+            style='Domain',
+            hue='Data Aug.',
+            height=6,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-optimizer-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['Data Aug.'].isin(['full', 'none'])],
+            kind='line',
+            x='Epoch',
+            y=column,
+            col='Data Aug.',
+            style='Domain',
+            hue='Optimizer',
+            height=6,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(output_dir, 'scores-optimizer-da_full_none-epoch-single-{}.png'.format(column)),
+            data=scores[scores['Data Aug.'].isin(['full', 'none'])],
+            kind='line',
+            x='Epoch',
+            y=column,
+            col=None,
+            style='Domain',
+            hue='Optimizer',
             height=6,
             facet_kws=dict(
-                xlim=(0.0, 1.0),
-                ylim=(0.0, 1.0),
-            ),
+                ylim=[0.0,1.0]
+            )
         )
-
-    columns = [
-        'dice_score',
-        'sdice_score',
-        #'iou_score',
-    ]
-    for column, agg in itertools.product(columns, aggs):
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-fold_test-epoch-{}-{}.png'.format(column, agg)),
-            data=scores,
+            outpath=os.path.join(output_dir, 'scores-optimizer-da_full_none-testaug_noise-epoch-{}.png'.format(column)),
+            data=scores[scores['DA'].isin(['full', 'none']) & (scores['test_augmentation'].str.contains('noise'))],
             kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='optimizer',
-            row_order=scores['optimizer'].sort_values().unique(),
-            col='wd_bn_DA',
-            col_order=scores['wd_bn_DA'].sort_values().unique(),
-            hue='fold_test',
+            x='Epoch',
+            y=column,
+            col='Data Aug.',
+            style='test_augmentation',
+            hue='Optimizer',
             height=6,
         )
-
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-optimizer-epoch-{}-{}.png'.format(column, agg)),
-            data=scores,
+            outpath=os.path.join(output_dir, 'scores-bn-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['DA'].isin(['full', 'none'])],
             kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='wd_bn',
-            row_order=scores['wd_bn'].sort_values().unique(),
-            col='DA',
-            col_order=scores['DA'].sort_values().unique(),
-            hue='optimizer',
+            x='Epoch',
+            y=column,
+            col='Optimizer',
+            row='Data Aug.',
+            style='Domain',
+            hue='Normalization',
             height=6,
         )
-
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-optimizer-epoch-{}-{}-fold_test.png'.format(column, agg)),
-            data=scores,
+            outpath=os.path.join(output_dir, 'scores-bn-single-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['DA'].isin(['full', 'none'])],
             kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='wd_bn',
-            row_order=scores['wd_bn'].sort_values().unique(),
-            col='DA',
-            col_order=scores['DA'].sort_values().unique(),
-            hue='optimizer',
-            style='fold_test',
+            x='Epoch',
+            y=column,
+            #col='Optimizer',
+            #row='Data Aug.',
+            style='Domain',
+            hue='Normalization',
             height=6,
         )
-
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-DA-epoch-{}-{}.png'.format(column, agg)),
-            data=scores,
+            outpath=os.path.join(output_dir, 'scores-bn-Optimizer-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['DA'].isin(['full', 'none'])],
             kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='wd_bn',
-            row_order=scores['wd_bn'].sort_values().unique(),
-            col='optimizer',
-            col_order=scores['optimizer'].sort_values().unique(),
-            hue='DA',
+            x='Epoch',
+            y=column,
+            col='Optimizer',
+            style='Domain',
+            hue='Normalization',
             height=6,
         )
-
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-domain-epoch-{}-{}.png'.format(column, agg)),
-            data=scores,
+            outpath=os.path.join(output_dir, 'scores-bn-Optimizer-Domain-Testaug-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['DA'].isin(['full', 'none'])],
             kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='wd_bn_DA',
-            row_order=scores['wd_bn_DA'].sort_values().unique(),
-            col='optimizer',
-            col_order=scores['optimizer'].sort_values().unique(),
-            hue='same_domain',
-            style='domain_val',
+            x='Epoch',
+            y=column,
+            col='Optimizer',
+            row='test_augmentation',
+            style='Domain',
+            hue='Normalization',
             height=6,
         )
-
         add_async_task(
             hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-trainer-domain-epoch-{}-{}.png'.format(column, agg)),
-            data=scores,
+            outpath=os.path.join(output_dir, 'scores-bn-Data-Aug-da_full_none-epoch-{}.png'.format(column)),
+            data=scores[scores['DA'].isin(['full', 'none'])],
             kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='trainer_short',
-            row_order=scores['trainer_short'].sort_values().unique(),
-            col='optimizer',
-            col_order=scores['optimizer'].sort_values().unique(),
-            hue='same_domain',
-            style='domain_val',
+            x='Epoch',
+            y=column,
+            col='Data Aug.',
+            style='Domain',
+            hue='Normalization',
             height=6,
         )
-
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-test_augmentation-epoch-{}-{}.png'.format(column, agg)),
-            data=scores,
-            kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='trainer_short',
-            row_order=scores['trainer_short'].sort_values().unique(),
-            col='optimizer',
-            col_order=scores['optimizer'].sort_values().unique(),
-            hue='test_augmentation',
-            style='domain_val',
-            height=6,
-        )
-
-        scores2 = scores[scores['DA'].isin(['full', 'none'])]
-        add_async_task(
-            hlp.relplot_and_save,
-            outpath=os.path.join(output_dir, 'scores-bn-epoch-{}-{}.png'.format(column, agg)),
-            data=scores2,
-            kind='line',
-            x='epoch',
-            y='{}_{}'.format(column, agg),
-            row='fold_train',
-            row_order=scores2['fold_train'].sort_values().unique(),
-            col='optimizer_DA',
-            col_order=scores2['optimizer_DA'].sort_values().unique(),
-            hue='wd_bn',
-            style='domain_val',
-            height=6,
-        )
-
+    
     join_async_tasks()
+
+    for name, scores_f in {
+        'DA full none only': scores[scores['DA'].isin(['full', 'none'])],
+        'DA all': scores[~scores['bn']]
+    }.items():
+        for groupby in [
+            ['domain_val_testaug', 'DA'],
+            ['domain_val_testaug', 'optimizer'],
+            ['domain_val_testaug', 'optimizer', 'DA'],
+            ['domain_val_testaug', 'bn'],
+            ['domain_val_testaug', 'bn', 'DA'],
+            ['domain_val_testaug', 'optimizer', 'bn'],
+            ['domain_val_testaug', 'optimizer', 'bn', 'DA'],
+            
+        ]:
+            print(name, groupby)
+            print(
+                scores_f.groupby(groupby)[columns].agg(['mean', 'std', 'count']).round(2).to_string()
+            )
 
 
 task = 'Task601_cc359_all_training'
 trainers = [
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
-
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
@@ -319,9 +339,6 @@ trainers = [
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
-
-    # 'nnUNetTrainerV2_MA_noscheduler_depth7_bf24_wd0_ep360_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep360_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -333,5 +350,5 @@ folds = [
 ]
 epochs = [10,20,30,40,80,120,200,280,360]
 
-plot_scores_full_small_compare(task, trainers, folds, epochs)
+#plot_scores_full_small_compare(task, trainers, folds, epochs)
 plot_scores(task, trainers, folds, epochs)

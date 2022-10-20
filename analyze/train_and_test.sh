@@ -18,9 +18,6 @@ trainers=(
   # "MA_noscheduler_depth5_wd0_bn_ep120_noDA"
   # "MA_noscheduler_depth5_wd0_bn_SGD_ep120"
   # "MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA"
-
-  # "MA_noscheduler_depth7_bf24_wd0_ep360_noDA"
-  # "MA_noscheduler_depth5_ep360_noDA"
 )
 declare -A fold_id_mapping
 fold_id_mapping['siemens15']=0
@@ -31,10 +28,11 @@ fold_id_mapping['philips15']=4
 fold_id_mapping['philips3']=5
 
 epochs=('010' '020' '030' '040' '080' '120')
-#epochs=('010' '020' '030' '040' '080' '120' '200' '280' '360')
 
 #export RESULTS_FOLDER="$HOME/data/nnUNet_trained_models"
 export RESULTS_FOLDER="$HOME/archive/old/nnUNet-container/data/nnUNet_trained_models"
+
+#export MA_USE_TEST_HOOKS=TRUE
 
 for trainer in "${trainers[@]}"
 do

@@ -102,12 +102,6 @@ def get_activations_input(layer_name, activations_dict):
         return torch.cat((data, conv_blocks_context), axis=1)
     return data
 
-def get_activations_output(layer_name, activations_dict):
-    if layer_name.endswith('.lrelu'):
-        data = get_activations_input(layer_name, activations_dict)
-        return torch.where(data > 0, data, data * 0.01)
-    return activations_dict.get(layer_name, None)
-
 def get_layer_config(layer_name):
     if layer_name.startswith('seg_outputs.'):
         return { 'kernel_size': [1, 1], 'stride': [1, 1] }
@@ -131,12 +125,11 @@ def get_layer_config(layer_name):
 
 def get_trainer_short(x):
     DA = re.search(r'_(noDA|nogamma|nomirror|norotation|noscaling)', x)
-    return '{}_wd={}_bn={}_DA={}_depth={}'.format(
+    return '{}_wd={}_bn={}_DA={}'.format(
         'SGD' if 'SGD' in x else 'Adam',
         '_wd0' not in x,
         '_bn' in x,
         'full' if DA is None else DA.group(1).replace('noDA', 'none'),
-        '7' if 'depth7' in x else '5'
     )
 
 
@@ -159,12 +152,6 @@ def load_split_all(task):
         ),
         allow_pickle=True
     )
-
-def load_split(task, fold):
-    return load_split_all(task)[get_fold_id_mapping()[fold]]
-
-def get_id_from_filename(filename):
-    return filename.split('_', 1)[0]
 
 def get_testdata_dir(task, trainer, fold_train, epoch, folder_test='archive/old/nnUNet-container/data/testout2'):
     tester = trainer.replace('nnUNetTrainerV2_', '').replace('__nnUNetPlansv2.1', '')
@@ -227,19 +214,6 @@ def get_name_paths_dict():
         )  
     ))
 
-def get_name_paths_dict_small():
-    splits_all = load_split_all('Task601_cc359_all_training')
-    dataset_keys_small_set = set(
-        sum(map(lambda x: sorted(x['train'])[:6], splits_all), [])
-    ).union(set(
-        sum(map(lambda x: x['val'], splits_all), [])
-    ))
-    regex = re.compile(r'^(CC\d{4}_[^_]+_\d+_\d+_[FM])')
-    return dict(filter(
-        lambda x: re.search(regex, x[0]).group(1) in dataset_keys_small_set,
-        get_name_paths_dict().items()
-    ))
-
 def generate_predictions_ram(trainer, dataset_keys=None, activations_extractor_kwargs={}):
     name_paths_dict = get_name_paths_dict()
     if dataset_keys is not None:
@@ -258,20 +232,23 @@ def generate_predictions_ram(trainer, dataset_keys=None, activations_extractor_k
         # all_in_gpu=False
     )
 
-def extract_central_patch(trainer, data, batches_per_scan=64):
+def extract_central_patch(data, patch_size):
     data_size = np.array(data.shape[2:4])
-    patch_size = np.array(trainer.patch_size)
-    start = (data_size // 2 - np.array(trainer.patch_size) // 2).clip(np.array([0, 0]), data_size)
+    start = (data_size // 2 - patch_size // 2).clip(np.array([0, 0]), data_size)
     end = (start + patch_size).clip(np.array([0, 0]), data_size)
-    batches = np.linspace(0, data.shape[1] - 1, min(batches_per_scan, data.shape[1])).astype(int)
-    return data[:, batches, start[0] : end[0], start[1] : end[1]]
+    return data[:, :, start[0] : end[0], start[1] : end[1]]
 
-def apply_prediction_data_filter_monkey_patch(trainer, batches_per_scan=64):
+def apply_prediction_data_filter_monkey_patch(trainer, batches_per_scan=64, central_patch=True):
     predict_original = trainer.predict_preprocessed_data_return_seg_and_softmax
     def predict_patched(*args, **kwargs):
         # extract patch here to only get one patch in feature extraction per slice
         # => evaluation faster and more consistent
-        data = extract_central_patch(trainer, args[0], batches_per_scan=batches_per_scan)
+        data = args[0]
+        if central_patch:
+            data = extract_central_patch(data, np.array(trainer.patch_size))
+        if batches_per_scan is not None and batches_per_scan > 0:
+            batches = np.linspace(0, data.shape[1] - 1, min(batches_per_scan, data.shape[1])).astype(int)
+            data = data[:, batches]
         return predict_original(data, *args[1:], **kwargs)
     trainer.predict_preprocessed_data_return_seg_and_softmax = predict_patched
     return predict_original
@@ -361,6 +338,7 @@ def get_summary_scores(task, trainer, fold_train, epoch, **kwargs):
                 'tesla_value': int(tesla_value),
                 # 'age': age,
                 # 'gender': gender,
+                'fold_test_base': tomograph_model + tesla_value,
                 'fold_test': tomograph_model + tesla_value + ('' if test_augmentation is None else '_' + test_augmentation),
                 'test_augmentation': test_augmentation,
                 'dice_score': data_foreground['Dice'],
@@ -379,24 +357,7 @@ def get_scores(task, trainer, fold_train, epoch, **kwargs):
     
     splits_all = load_split_all(task)
 
-    #TODO remove csv loading in future!!
-    scores_csv_path = os.path.join(directory_testout, 'scores.csv')
-    if os.path.exists(scores_csv_path):
-        scores = pd.read_csv(scores_csv_path)
-        scores.drop(['Unnamed: 0', 'fold', 'fold_test'], axis='columns', inplace=True, errors='ignore')
-        scores['trainer'] = trainer
-        scores['epoch'] = epoch
-        scores['fold_train'] = fold_train
-        scores['fold_test'] = scores['tomograph_model'].str.cat(scores['tesla_value'].astype(str))
-        scores['test_augmentation'] = None
-        id_idlong_map = dict(map(
-        lambda x: (get_id_from_filename(x), x),
-            sum(map(lambda x: x['train'] + x['val'], splits_all), [])
-        ))
-        scores['id_long'] = scores['id'].apply(lambda x: id_idlong_map.get(x, None))
-        scores['iou_score'] = scores['dice_score'].apply(dice_to_iou)
-    else:
-        scores = get_summary_scores(task, trainer, fold_train, epoch, **kwargs)
+    scores = get_summary_scores(task, trainer, fold_train, epoch, **kwargs)
     if scores.empty:
         return scores
     
@@ -408,42 +369,39 @@ def get_scores(task, trainer, fold_train, epoch, **kwargs):
     scores['DA'] = scores['trainer'].str.replace(r'^.*?(noDA|nogamma|nomirror|norotation|noscaling|$).*$', lambda m: m.group(1) or 'full', n=1, regex=True).str.replace('noDA', 'none')
     scores['bn'] = scores['trainer'].str.contains('_bn')
     scores['test_augmentation'] = scores['test_augmentation'].fillna('None')
+    scores['sdice_score'] = scores['sdice_score'].fillna(0)
     return scores
 
-def load_domainshift_scores(task, trainer, fold_train, epoch):
-    scores = get_scores(task, trainer, fold_train, epoch)
 
-    scores_same = scores[scores['fold_train'] == scores['fold_test']]
-    scores_other = scores[scores['fold_train'] != scores['fold_test']]
-    return pd.DataFrame({
-        'trainer': [trainer],
-        'fold_train': [fold_train],
-        'epoch': [epoch],
-        'dice_score_all_mean': [scores['dice_score'].mean()],
-        'dice_score_all_std': [scores['dice_score'].std()],
-        'sdice_score_all_mean': [scores['sdice_score'].mean()],
-        'sdice_score_all_std': [scores['sdice_score'].std()],
-        'dice_score_same_mean': [scores_same['dice_score'].mean()],
-        'dice_score_same_std': [scores_same['dice_score'].std()],
-        'sdice_score_same_mean': [scores_same['sdice_score'].mean()],
-        'sdice_score_same_std': [scores_same['sdice_score'].std()],
-        'dice_score_other_mean': [scores_other['dice_score'].mean()],
-        'dice_score_other_std': [scores_other['dice_score'].std()],
-        'sdice_score_other_mean': [scores_other['sdice_score'].mean()],
-        'sdice_score_other_std': [scores_other['sdice_score'].std()],
 
-        'dice_score_diff_mean': [scores_same['dice_score'].mean() - scores_other['dice_score'].mean()],
-        'dice_score_diff_std': [scores_same['dice_score'].std() - scores_other['dice_score'].std()],
-        'sdice_score_diff_mean': [scores_same['sdice_score'].mean() - scores_other['sdice_score'].mean()],
-        'sdice_score_diff_std': [scores_same['sdice_score'].std() - scores_other['sdice_score'].std()]
-    })
+from scipy.stats import pearsonr
+
+def pearsonr_pval(x,y):
+    return pearsonr(x,y)[1]
+
+def get_corr_stats(stats, groupby, columns, column_combinations=None):
+    column_combinations = list(itertools.combinations(columns, 2)) if column_combinations is None else column_combinations
+    if len(groupby) == 0:
+        stats = stats.assign(_='all')
+        groupby = ['_']
+    grouped = stats.groupby(groupby)
+    count = grouped[columns[0]].agg(num_samples='count')
+    corr = grouped[columns].corr(method='pearson').unstack()[column_combinations]
+    pval = grouped[columns].corr(method=pearsonr_pval).unstack()[column_combinations]
+    corr.columns = corr.columns.to_flat_index().map('-'.join).map(lambda x: '{}_corr'.format(x))
+    pval.columns = pval.columns.to_flat_index().map('-'.join).map(lambda x: '{}_pval'.format(x))
+    corr = corr.join(pval).join(count).round(2)
+    return corr
 
 
 import seaborn
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-seaborn.set_style('darkgrid')
+seaborn.set_context('paper', font_scale=2)
+#seaborn.set_style('darkgrid')
+#seaborn.set_style('grid')
 def relplot_and_save(outpath, xscale='linear', yscale='linear', *args, **kwargs):
+    outpath = outpath.replace(' ', '-')
     print(outpath)
     g = seaborn.relplot(
         *args,
@@ -458,38 +416,14 @@ def relplot_and_save(outpath, xscale='linear', yscale='linear', *args, **kwargs)
     )
     plt.close(g.fig)
 
-from scipy.stats import kendalltau, pearsonr, spearmanr
-
-def kendall_pval(x,y):
-    return kendalltau(x,y)[1]
-
-def pearsonr_pval(x,y):
-    return pearsonr(x,y)[1]
-
-def spearmanr_pval(x,y):
-    return spearmanr(x,y)[1]
-
-def get_corr_stats(stats, groupby, columns):
-    column_combinations = list(itertools.combinations(columns, 2))
-    if len(groupby) == 0:
-        stats = stats.assign(_='all')
-        groupby = ['_']
-    grouped = stats.groupby(groupby)
-    count = grouped[columns[0]].agg(num_samples='count')
-    corr = grouped[columns].corr(method='pearson').unstack()[column_combinations]
-    pval = grouped[columns].corr(method=pearsonr_pval).unstack()[column_combinations]
-    corr.columns = corr.columns.to_flat_index().map('-'.join).map(lambda x: '{}_corr'.format(x))
-    pval.columns = pval.columns.to_flat_index().map('-'.join).map(lambda x: '{}_pval'.format(x))
-    corr = corr.join(pval).join(count).round(2)
-    #corr_summarized = None
-    # if len(groupby) > 1:
-    #     corr_summarized = corr.groupby(groupby[:-1]).agg(
-    #         ['mean', 'std', 'min', 'max']
-    #     ).round(2)
-    return [corr]#, corr_summarized
-
-def plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score='iou_score_mean', palette='cool', yscale='linear'):
-    suffix = 'single' if row is None else row
+def plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, col='fold_train', score='iou_score_mean', hue=None, style='domain_val', palette='cool', yscale='linear', x_line='# Layer', share_measurement=True):
+    hue = score if hue is None else hue
+    suffix = '{}-{}-{}-{}'.format(
+        'single' if col is None else col,
+        'single' if row is None else row,
+        'single' if hue is None else hue,
+        'single' if style is None else style,
+    )
     add_async_task(
         relplot_and_save,
         outpath=os.path.join(
@@ -498,18 +432,21 @@ def plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, m
         ),
         data=stats_meaned_over_layer,
         kind='scatter',
-        x='{}_mean'.format(measurement),
+        x=measurement,
         y=score,
         row=row,
         row_order=None if row is None else stats_meaned_over_layer[row].sort_values().unique(),
-        col='fold_train',
-        col_order=stats_meaned_over_layer['fold_train'].sort_values().unique(),
-        style='domain_val' if 'domain_val' in stats_meaned_over_layer else None,
-        size='epoch',
-        hue=score,
+        col=col,
+        col_order=None if col is None else stats_meaned_over_layer[col].sort_values().unique(),
+        style=style if style in stats_meaned_over_layer else None,
+        size='Epoch',
+        hue=hue,
         palette=palette,
         aspect=2,
         height=6,
+        facet_kws=dict(
+            sharex=share_measurement
+        )
     )
     add_async_task(
         relplot_and_save,
@@ -519,164 +456,29 @@ def plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, m
         ),
         data=stats,
         kind='line',
-        x='layer_pos',
+        x=x_line,
         y=measurement,
         row=row,
         row_order=None if row is None else stats[row].sort_values().unique(),
-        col='fold_train',
-        col_order=stats['fold_train'].sort_values().unique(),
-        style='domain_val' if 'domain_val' in stats else None,
-        errorbar=None,
-        hue=score,
+        col=col,
+        col_order=None if col is None else stats[col].sort_values().unique(),
+        style=style if style in stats else None,
+        # #errorbar=None,
+        # estimator=None,
+        # units='fold_test',
+        hue=hue,
         palette=palette,
         aspect=2,
         height=6,
         yscale=yscale,
-    )
-
-    # measurements_meaned = ['{}_mean'.format(measurement), score, 'epoch']
-    # measurements_layered = [measurement, score, 'epoch']
-    
-    # groupby = ([] if row is None else [row])
-
-    # print('\n'.join([
-    #     '{}-{}-meaned-{}'.format(measurement, score, suffix),
-    #     *list(map(
-    #         lambda x: x.to_string(),
-    #         get_corr_stats(stats_meaned_over_layer, groupby, measurements_meaned)
-    #     ))
-    # ]))
-    # print('\n'.join([
-    #     '{}-{}-meaned-{}_fold_train'.format(measurement, score, suffix),
-    #     *list(map(
-    #         lambda x: x.to_string(),
-    #         get_corr_stats(stats_meaned_over_layer, groupby + ['fold_train'], measurements_meaned)
-    #     ))
-    # ]))
-    # print('\n'.join([
-    #     '{}-{}-layered-{}'.format(measurement, score, suffix),
-    #     *list(map(
-    #         lambda x: x.to_string(),
-    #         get_corr_stats(stats, ['layer_pos'] + groupby, measurements_layered)
-    #     ))
-    # ]))
-    # # print('\n'.join([
-    # #     '{}-{}-layered-{}_fold_train'.format(measurement, score, suffix),
-    # #     *list(map(
-    # #         lambda x: x.to_string(),
-    # #         get_corr_stats(stats, ['layer_pos'] + groupby + ['fold_train'], measurements_layered)
-    # #     ))
-    # # ]))
-
-def numerate_nested(df, columns, column_name_out='x'):
-    grouped = df[columns].groupby(columns[0:-1])
-    num_local = grouped.value_counts(normalize=True).groupby(columns[0:-1]).cumsum() * 0.7
-    shifted = num_local - num_local.groupby(columns[0:-1]).min()
-    num_global = shifted + df.assign(group_index=grouped.ngroup()).groupby(columns)['group_index'].first()
-    return df.join(
-        num_global.reset_index().set_index(columns).rename(columns={0: column_name_out}),
-        on=columns
-    )
-
-def create_plot(
-    df,
-    column_x,
-    column_y,
-    column_subplots,
-    kind='scatter',
-    column_size=None,
-    column_color=None,
-    colors=None,
-    ncols=1,
-    figsize=(32, 24),
-    lim_same_x=True,
-    lim_same_y=True,
-    lim_same_c=True,
-    colormap='cool',
-    legend=True,
-    fig_num=None,
-    fig_clear=False
-):
-    colors = df if colors is None else colors
-    def nan_or_inf_to(v, to):
-        return to if v != v or abs(v) == float('inf') else v
-    def get_lim(df, column):
-        v_min = nan_or_inf_to(df[column].min().min().item(), 0)
-        v_max = nan_or_inf_to(df[column].max().max().item(), 0)
-        v_ext = (v_max - v_min) * 0.01
-        return v_min - v_ext, v_max + v_ext
-    def get_scalar_map(colors):
-        if column_color is None:
-            return None
-        return mpl.cm.ScalarMappable(
-            norm=mpl.colors.Normalize(
-                vmin=colors[column_color].min().item(),
-                vmax=colors[column_color].max().item()
-            ),
-            cmap=plt.get_cmap(colormap)
+        facet_kws=dict(
+            sharey=share_measurement
         )
-    
-    names_subplot = sorted(df[column_subplots].unique())
-    fig, axes = plt.subplots(
-        num=fig_num,
-        clear=fig_clear,
-        figsize=figsize,
-        nrows=int(np.ceil(len(names_subplot) / ncols)),
-        ncols=ncols
     )
-    axes = np.atleast_1d(axes)
-    axes_flat = axes.flat
-
-    scalar_map = get_scalar_map(colors) if lim_same_c else None
-    xlim = get_lim(df, column_x) if lim_same_x else None
-    ylim = get_lim(df, column_y) if lim_same_y else None
-
-    def get_attributes(df_filtered, name_subplot):
-        if kind == 'line':
-            if column_color is None:
-                return {}
-            colors_filtered = colors.xs(name_subplot)
-            scalar_map_filtered = get_scalar_map(colors_filtered) if scalar_map is None else scalar_map
-            return {
-                'color': dict(map(
-                    lambda item: (item[0], scalar_map_filtered.to_rgba(item[1])),
-                    colors_filtered[column_color].to_dict().items(),
-                ))
-            }
-        return {
-            'c': column_color,
-            's': column_size,
-            'colormap': colormap,
-            'colorbar': (not lim_same_c),
-            'vmin': df[column_color].min().item() if lim_same_c else None,
-            'vmax': df[column_color].max().item() if lim_same_c else None,
-        }
-        
-
-    for i, name_subplot in enumerate(names_subplot):
-        df_filtered = df[df[column_subplots] == name_subplot]
-        df_filtered.plot(
-            kind=kind,
-            x=column_x,
-            y=column_y,
-            title=name_subplot,
-            legend=legend,
-            grid=True,
-            ax=axes_flat[i],
-            xlim=xlim,
-            ylim=ylim,
-            **get_attributes(df_filtered, name_subplot)
-        )
-
-    if scalar_map is not None:
-        fig.colorbar(scalar_map, ax=axes.ravel().tolist())
-    
-    return fig, axes
 
 
 
 
-import torch
 
 def get_normed(features, dim=1):
     norm = features.norm(dim=dim, keepdim=True)
@@ -704,13 +506,6 @@ def get_cosine_similarity(features_a, features_b):
         features_a,
         features_b,
         lambda a,b: torch.nn.functional.cosine_similarity(a, b, dim=1)
-    )
-
-def get_l2_similarity(features_a, features_b):
-    return apply_measure_on_all_combinations(
-        features_a,
-        features_b,
-        lambda a,b: 1.0 / (1 + (a - b).norm(dim=1))
     )
 
 def standardized_moment(array, order, dim=None, keepdim=False):
@@ -741,13 +536,6 @@ def get_noise_estimates(input):
         dim=(-2, -1)
     ) * norm_const
     return noise_mean
-
-
-def dice_to_iou(dice_score):
-    return dice_score / (2.0 - dice_score)
-
-def iou_to_dice(iou):
-    return 2.0 * iou / (1.0 + iou)
 
 
 def get_moments(name, value, dim=None, keepdim=False):

@@ -6,9 +6,6 @@ import glob
 import os
 import helpers as hlp
 
-def get_kullback_liebler_divergence(P, Q):
-    return torch.sum(P * torch.log(P / (Q + 1e-3)))
-
 from scipy.stats import wasserstein_distance
 def get_representation_shift(act_ref, act_test):
     return torch.tensor([
@@ -155,6 +152,17 @@ def plot_rshift(stats_glob, output_dir):
     stats = pd.concat([
         pd.read_csv(path) for path in glob.iglob(stats_glob, recursive=False)
     ]).reset_index(drop=True)
+    stats.rename(
+        columns={
+            'name': 'layer'
+        },
+        inplace=True
+    )
+    layers_position_map = hlp.get_layers_position_map()
+    layers_position_map['input'] = -2
+    layers_position_map['gt'] = -1
+    stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
+
     index = ['trainer', 'fold_train', 'epoch']
     scores = pd.concat([
         hlp.get_scores(
@@ -164,10 +172,12 @@ def plot_rshift(stats_glob, output_dir):
     ]).reset_index(drop=True)
     index = [*index, 'fold_test', 'is_validation']
     scores = scores.groupby(index).agg(
+        fold_test_base=('fold_test_base', 'first'),
         optimizer=('optimizer', 'first'),
         wd=('wd', 'first'),
         DA=('DA', 'first'),
         bn=('bn', 'first'),
+        test_augmentation=('test_augmentation', 'first'),
         dice_score_mean=('dice_score', 'mean'),
         dice_score_std=('dice_score', 'std'),
         iou_score_mean=('iou_score', 'mean'),
@@ -175,84 +185,173 @@ def plot_rshift(stats_glob, output_dir):
         sdice_score_mean=('sdice_score', 'mean'),
         sdice_score_std=('sdice_score', 'std')
     ).reset_index()
+    scores['same_domain'] = scores['fold_train'] == scores['fold_test']
+    scores['same_domain_base'] = scores['fold_train'] == scores['fold_test_base']
+    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
+    scores['domain_val_base'] = scores['same_domain_base'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
+    scores['domain_val_testaug'] = scores['domain_val'] + scores['test_augmentation'].apply(lambda x: '' if x == 'None' else ' testaug')
+    scores['trainer_short'] = scores['trainer'].apply(hlp.get_trainer_short)
+    scores['has_testaug'] = scores['test_augmentation'] != 'None'
     stats = stats.join(scores.set_index(index), on=index)
+    stats['is_validation'] = stats['is_validation'].astype(bool)
 
-    layers_position_map = hlp.get_layers_position_map()
-    layers_position_map['input'] = -2
-    layers_position_map['gt'] = -1
-    stats.rename(columns={ 'name': 'layer' }, inplace=True)
-    stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
-    stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
-    stats['optimizer_wd_bn'] = stats['optimizer'] + ' ' + stats['wd_bn']
-    stats['same_domain'] = stats['fold_train'] == stats['fold_test']
-    stats['domain_val'] = stats['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + stats['is_validation'].apply(lambda x: 'validation' if x else '')
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
 
-    print(stats)
-    print(stats.head(20).to_string())
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=2)
-
-    #stats = stats[stats['fold_train'] == 'siemens15']
-    #stats = stats[stats['epoch'].isin([20, 40, 120])]
-    #stats = stats[stats['layer_pos'] <= 39]
-    #stats = stats[stats['fold_test'] == 'siemens3']
     stats = stats[~stats['wd']]
-    #stats = stats[stats['DA'].isin(['none', 'full'])]
-    stats = stats[stats['domain_val'] != 'other validation']
-    stats = stats[(stats['bn']) | (~stats['layer'].str.endswith('.instnorm'))]
-    print(stats)
-    
+    stats = stats[stats['DA'].isin(['none', 'full'])]
+    stats = stats[stats['same_domain'] | (~stats['is_validation'])]
 
-    columns_measurements = ['rshift']
 
-    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'fold_test', 'domain_val']).agg(
-        iou_score_mean=('iou_score_mean', 'first'),
-        dice_score_mean=('dice_score_mean', 'first'),
-        sdice_score_mean=('sdice_score_mean', 'first'),
-        optimizer=('optimizer', 'first'),
-        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
+    stats['Data Aug.'] = stats['DA'].str.replace(r'^no([^n].+)$', r'no-\1', n=1, regex=True)
+    stats['Domain'] = stats['domain_val_testaug'].str.replace('same validation', 'Validation').str.replace('same', 'Training').str.replace('other testaug', 'Other w/ test aug.').str.replace('other', 'Other w/o test aug.')
+    stats['Base Domain'] = stats['domain_val_base'].str.replace('same validation', 'Validation').str.replace('same', 'Training').str.replace('other', 'Other') + stats['test_augmentation'].apply(lambda x: '' if x == 'None' else ' w/ test aug.')
+    stats['Optimizer'] = stats['optimizer']
+    stats['DSC'] = stats['dice_score_mean']
+    stats['Surface DSC'] = stats['sdice_score_mean']
+    stats['IoU'] = stats['iou_score_mean']
+    stats['Epoch'] = stats['epoch']
+    stats['Layer'] = stats['layer']
+    stats['# Layer'] = stats['layer_pos']
+    stats['Normalization'] = stats['bn'].apply(lambda x: 'Batch' if x else 'Instance')
+    stats['Representation shift'] = stats['rshift']
+
+    # TODO
+    stats = stats[(stats['Normalization'] == 'Batch') | (~stats['Layer'].str.endswith('.instnorm'))]
+
+    stats = stats[(~stats['Layer'].str.endswith('.instnorm'))]
+    stats = stats[stats['# Layer'] >= 0]
+    #
+
+    stats = stats[stats['Surface DSC'] > 0.03]
+    output_dir = output_dir + '-gt_0_03'
+
+    columns_measurements = ['Representation shift']
+
+    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'Epoch', 'fold_test', 'is_validation']).agg(**{
+        'IoU': ('IoU', 'first'),
+        'DSC': ('DSC', 'first'),
+        'Surface DSC': ('Surface DSC', 'first'),
+        'Optimizer': ('Optimizer', 'first'),
+        'Data Aug.': ('Data Aug.', 'first'),
+        'Normalization': ('Normalization', 'first'),
+        'Domain': ('Domain', 'first'),
+        'Base Domain': ('Base Domain', 'first'),
+        'domain_val_base': ('domain_val_base', 'first'),
+        'has_testaug': ('has_testaug', 'first'),
         **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements
+            column: (column, 'mean') for column in columns_measurements
         }
-    ).reset_index()
+    }).reset_index()
 
-    for measurement, score in itertools.product(columns_measurements, ['dice_score_mean', 'sdice_score_mean']):
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score=score, yscale='log')
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score, yscale='log')
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer', score=score, yscale='log')
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score, yscale='log')
+    print(
+        stats.groupby(['trainer_short', 'fold_train', 'Epoch', 'is_validation'])['fold_test'].agg(['count', 'nunique']).to_string()
+    )
+
+    for groupby in [
+        [],
+        ['Optimizer',],
+        ['Normalization'],
+        ['Data Aug.'],
+        ['Optimizer', 'Normalization'],
+        ['Optimizer', 'Normalization', 'Data Aug.'],
+
+        ['fold_train'],
+        ['Optimizer', 'fold_train'],
+        ['Normalization', 'fold_train'],
+        ['Optimizer', 'Normalization', 'fold_train'],
+
+        ['Domain'],
+        ['Domain', 'Optimizer', 'Normalization'],
+
+        ['Optimizer', 'Normalization', 'has_testaug']
+    ]:
+        print(groupby)
+        print(
+            hlp.get_corr_stats(
+                stats=stats_meaned_over_layer,
+                groupby=groupby,
+                columns=['Representation shift', 'Surface DSC', 'Epoch']
+            ).to_string()
+        )
     
+    print(stats_meaned_over_layer.groupby(['Domain', 'Optimizer', 'Normalization'])['Surface DSC'].agg(['mean', 'std', 'count']).to_string())
+
+    print(stats)
+    os.makedirs(output_dir, exist_ok=True)
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=4)
+
+    for measurement, score in itertools.product(columns_measurements, ['DSC', 'Surface DSC']):
+        print(stats)
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='Base Domain', style='Data Aug.', score=score, yscale='log', share_measurement='col')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='fold_train', style='Data Aug.', score=score, share_measurement='col')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='Data Aug.', style=None, score=score, yscale='log', share_measurement='col')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='has_testaug', style='Data Aug.', score=score, yscale='log', share_measurement='col')
+
+
+        col='Normalization'
+        row='Optimizer'
+        hue='fold_train'
+        style='Data Aug.'
+        score=score
+
+        stats_corr = hlp.get_corr_stats(
+            stats,
+            groupby=['# Layer', col, row, hue, style],
+            columns=[measurement, score],
+            column_combinations=None
+        ).reset_index()
+        measurement_pval = '{}-{}_pval'.format(measurement, score)
+        measurement_corr = '{}-{}_corr'.format(measurement, score)
+        stats_corr.loc[stats_corr[measurement_pval] >= 0.01, measurement] = np.nan
+        stats_corr[measurement] = stats_corr[measurement_corr]
+        suffix = '{}-{}-{}-{}'.format(
+            'single' if col is None else col,
+            'single' if row is None else row,
+            'single' if hue is None else hue,
+            'single' if style is None else style,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                '{}-{}-layered-{}.png'.format(measurement, score, suffix)
+            ),
+            data=stats_corr,
+            kind='line',
+            x='# Layer',
+            y=measurement,
+            row=row,
+            row_order=None if row is None else stats_corr[row].sort_values().unique(),
+            col=col,
+            col_order=None if col is None else stats_corr[col].sort_values().unique(),
+            style=style if style in stats_corr else None,
+            hue=hue,
+            palette='cool',
+            aspect=2,
+            height=6,
+        )
     join_async_tasks()
 
 
 
 task = 'Task601_cc359_all_training'
 trainers = [
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
-
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
 
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -266,10 +365,6 @@ epochs = [10,20,30,40,80,120]
 
 #calc_rshift(task, trainers, folds, epochs, output_dir='data/csv/activations-rshift')
 
-# plot_rshift(
-#     'data/csv/activations-rshift/24spf-64bps/*.csv',
-#     'data/fig/activations-rshift/24spf-64bps-all_DAs'
-# )
 plot_rshift(
     'data/csv/activations-rshift/6spf-64bps-testaug/*.csv',
     'data/fig/activations-rshift/6spf-64bps-testaug'

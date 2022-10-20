@@ -382,29 +382,58 @@ def calc_roughness_and_confidence_grouped(task, trainers, folds, epochs):
         )
 
 
-def plot_roughness_and_confidence_grouped():
+def plot_roughness_and_confidence_grouped(stats_glob, output_dir):
     stats = pd.concat([
-        #pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s12-b24*.csv', recursive=False)
-        pd.read_csv(path) for path in glob.iglob('data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s6-b48-testaug*.csv', recursive=False)
+        pd.read_csv(path) for path in glob.iglob(stats_glob, recursive=False)
     ]).reset_index(drop=True)
+    stats.rename(
+        columns={
+            'name': 'layer',
+            'iou_score_mean': 'iou_score_mean_sampled',
+            'iou_score_std': 'iou_score_std_sampled',
+            'dice_score_mean': 'dice_score_mean_sampled',
+            'dice_score_std': 'dice_score_std_sampled',
+            'sdice_score_mean': 'sdice_score_mean_sampled',
+            'sdice_score_std': 'sdice_score_std_sampled',
+        },
+        inplace=True
+    )
+    layers_position_map = hlp.get_layers_position_map()
+    layers_position_map['input'] = -2
+    layers_position_map['gt'] = -1
+    stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
 
+    index = ['trainer', 'fold_train', 'epoch']
     scores = pd.concat([
         hlp.get_scores(
             'Task601_cc359_all_training',
             *ids
-        ) for ids in stats[['trainer', 'fold_train', 'epoch']].drop_duplicates().values.tolist()
-    ])[['trainer', 'optimizer', 'wd', 'DA', 'bn']].drop_duplicates().reset_index(drop=True)
-    stats = stats.join(scores.set_index('trainer'), on='trainer')
+        ) for ids in stats[index].drop_duplicates().values.tolist()
+    ]).reset_index(drop=True)
+    index = [*index, 'fold_test', 'is_validation']
+    scores = scores.groupby(index).agg(
+        fold_test_base=('fold_test_base', 'first'),
+        optimizer=('optimizer', 'first'),
+        wd=('wd', 'first'),
+        DA=('DA', 'first'),
+        bn=('bn', 'first'),
+        test_augmentation=('test_augmentation', 'first'),
+        dice_score_mean=('dice_score', 'mean'),
+        dice_score_std=('dice_score', 'std'),
+        iou_score_mean=('iou_score', 'mean'),
+        iou_score_std=('iou_score', 'std'),
+        sdice_score_mean=('sdice_score', 'mean'),
+        sdice_score_std=('sdice_score', 'std')
+    ).reset_index()
+    scores['same_domain'] = scores['fold_train'] == scores['fold_test']
+    scores['same_domain_base'] = scores['fold_train'] == scores['fold_test_base']
+    scores['domain_val'] = scores['same_domain'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
+    scores['domain_val_base'] = scores['same_domain_base'].apply(lambda x: 'same' if x else 'other') + scores['is_validation'].apply(lambda x: ' validation' if x else '')
+    scores['domain_val_testaug'] = scores['domain_val'] + scores['test_augmentation'].apply(lambda x: '' if x == 'None' else ' testaug')
+    scores['trainer_short'] = scores['trainer'].apply(hlp.get_trainer_short)
 
-    stats.rename(columns={'name':'layer'}, inplace = True)
-    layers_position_map = hlp.get_layers_position_map()
-    stats['layer_pos'] = stats['layer'].apply(lambda d: layers_position_map.get(d))
-    stats['trainer_short'] = stats['trainer'].apply(hlp.get_trainer_short)
-    stats['same_domain'] = stats['fold_train'] == stats['fold_test']
-    stats['trained_on'] = stats['same_domain'] & (~stats['is_validation'])
-    stats['domain_val'] = stats['same_domain'].apply(lambda x: 'same' if x else 'other') + ' ' + stats['is_validation'].apply(lambda x: 'validation' if x else '')
-    stats['wd_bn'] = stats['wd'].apply(lambda x: 'wd=' + str(x)) + ' ' + stats['bn'].apply(lambda x: 'bn=' + str(x))
-    stats['optimizer_wd_bn'] = stats['optimizer'] + ' ' + stats['wd_bn']
+    stats = stats.join(scores.set_index(index), on=index)
+    stats['is_validation'] = stats['is_validation'].astype(bool)
 
     stats_weights = pd.concat([
         pd.read_csv(path) for path in glob.iglob('data/csv/weights/weights-*.csv', recursive=False)
@@ -412,7 +441,7 @@ def plot_roughness_and_confidence_grouped():
     stats_weights['name'] = stats_weights['name'].fillna('all')
     # take .conv weights if instancenorm was last layer
     stats_weights = stats_weights[~stats_weights['name'].str.endswith('.lrelu')]
-    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.lrelu', regex=True)
+    stats_weights['name'] = stats_weights['name'].str.replace('.conv', '.lrelu')
     stats_weights = stats_weights[['trainer', 'fold_train', 'epoch', 'name', 'norm_frob_weight', 'norm_spectral']]
     stats = stats.join(
         stats_weights.set_index(['trainer', 'fold_train', 'epoch', 'name']),
@@ -423,41 +452,161 @@ def plot_roughness_and_confidence_grouped():
         stats[column + '_spectral'] = stats[column] / stats['norm_spectral']
 
 
-
     stats = stats[~stats['wd']]
-    #subdir = 'multi/train-test-all'
-    subdir = 'testaug'
+    stats = stats[stats['DA'].isin(['none', 'full'])]
+    stats = stats[stats['same_domain'] | (~stats['is_validation'])]
+
+
+    stats['Data Aug.'] = stats['DA'].str.replace(r'^no([^n].+)$', r'no-\1', n=1, regex=True)
+    stats['Domain'] = stats['domain_val_testaug'].str.replace('same validation', 'Validation').str.replace('same', 'Training').str.replace('other testaug', 'Other w/ test aug.').str.replace('other', 'Other w/o test aug.')
+    stats['Base Domain'] = stats['domain_val_base'].str.replace('same validation', 'Validation').str.replace('same', 'Training').str.replace('other', 'Other') + stats['test_augmentation'].apply(lambda x: '' if x == 'None' else ' w/ test aug.')
+    stats['Optimizer'] = stats['optimizer']
+    stats['DSC'] = stats['dice_score_mean']
+    stats['Surface DSC'] = stats['sdice_score_mean']
+    stats['IoU'] = stats['iou_score_mean']
+    stats['Epoch'] = stats['epoch']
+    stats['Layer'] = stats['layer']
+    stats['# Layer'] = stats['layer_pos']
+    stats['Normalization'] = stats['bn'].apply(lambda x: 'Batch' if x else 'Instance')
+    stats['Roughness'] = stats['roughness_frob']
+    stats['Roughness no-frob'] = stats['roughness']
+    stats['Confidence'] = stats['confidence_frob']
+    stats['Confidence no-frob'] = stats['confidence']
+    stats['Weighted-Confidence'] = stats['confidence_weighted_frob']
+    stats['Weighted-Confidence no-frob'] = stats['confidence_weighted']
 
     # TODO
-    stats = stats[~stats['layer'].str.startswith('conv_blocks_context.0.blocks.0')]
-    stats = stats[~stats['layer'].str.startswith('seg_outputs')]
-    stats = stats[~stats['layer'].str.startswith('tu')]
-    stats = stats[stats['domain_val'] != 'other validation']
-    # 
+    stats = stats[~stats['Layer'].str.startswith('conv_blocks_context.0.blocks.0')]# roughness more problems than confidence
+    stats = stats[~stats['Layer'].str.startswith('tu')] # roughness more problems than confidence
+    stats = stats[~stats['Layer'].str.startswith('seg_outputs')]  # confidence more problems than roughness
+    #
 
-    
+    layers_block_map = dict(map(reversed, enumerate(sorted(stats['layer_pos'].drop_duplicates().values))))
+    stats['# Block'] = stats['layer_pos'].apply(lambda x: layers_block_map[x])
+    print(stats[['# Block', 'Layer']].drop_duplicates().sort_values('# Block').to_string())
 
-    print(stats)
-
-    output_dir = os.path.join(
-        'data/fig/activations-roughness-and-confidence/',
-        subdir
-    )
-    os.makedirs(output_dir, exist_ok=True)
-
-    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+    stats = stats[stats['Surface DSC'] > 0.03]
+    output_dir = output_dir + '-gt_0_03'
 
     columns_measurements = [
-        'roughness',
-        #'confidence',
-        'confidence_weighted',
-        'roughness_frob',
-        #'confidence_frob',
-        'confidence_weighted_frob',
+        'Roughness',
+        'Roughness no-frob',
+        'Confidence',
+        'Confidence no-frob',
+        'Weighted-Confidence',
+        'Weighted-Confidence no-frob',
         #'roughness_spectral',
         #'confidence_spectral',
         #'confidence_weighted_spectral'
     ]
+    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'Epoch', 'fold_test', 'is_validation']).agg(**{
+        'IoU': ('IoU', 'first'),
+        'DSC': ('DSC', 'first'),
+        'Surface DSC': ('Surface DSC', 'first'),
+        'Optimizer': ('Optimizer', 'first'),
+        'Normalization': ('Normalization', 'first'),
+        'Data Aug.': ('Data Aug.', 'first'),
+        'Domain': ('Domain', 'first'),
+        'Base Domain': ('Base Domain', 'first'),
+        **{
+            column: (column, 'mean') for column in columns_measurements
+        }
+    }).reset_index()
+
+    stats_meaned_over_layer['ro'] = stats_meaned_over_layer['Roughness no-frob']
+    stats_meaned_over_layer['ro_f'] = stats_meaned_over_layer['Roughness']
+    stats_meaned_over_layer['cw'] = stats_meaned_over_layer['Weighted-Confidence no-frob']
+    stats_meaned_over_layer['cw_f'] = stats_meaned_over_layer['Weighted-Confidence']
+    stats_meaned_over_layer['c'] = stats_meaned_over_layer['Confidence no-frob']
+    stats_meaned_over_layer['c_f'] = stats_meaned_over_layer['Confidence']
+    stats_meaned_over_layer['sd'] = stats_meaned_over_layer['Surface DSC']
+    stats_meaned_over_layer['e'] = stats_meaned_over_layer['Epoch']
+    columns_measurements_short = ['ro', 'ro_f', 'cw', 'cw_f', 'c', 'c_f']
+    for groupby in [
+        [],
+        ['Optimizer',],
+        ['Normalization'],
+        ['Data Aug.'],
+        ['Optimizer', 'Normalization'],
+        ['Optimizer', 'Normalization', 'Data Aug.'],
+
+        ['fold_train'],
+        ['Optimizer', 'fold_train'],
+        ['Normalization', 'fold_train'],
+        ['Optimizer', 'Normalization', 'fold_train'],
+
+        ['Domain'],
+        ['Domain', 'Optimizer', 'Normalization'],
+    ]:
+        print(groupby)
+        print(
+            hlp.get_corr_stats(
+                stats=stats_meaned_over_layer,
+                groupby=groupby,
+                columns=[*columns_measurements_short, 'sd', 'e'],
+                column_combinations=[
+                    *itertools.product(columns_measurements_short, [ 'sd' ]),
+                    #*itertools.product(columns_measurements_short, [ 'e' ]),
+                    ('cw', 'ro'),
+                    ('cw_f', 'ro_f'),
+                    ('sd', 'e')
+                ]
+            ).to_string()
+        )
+
+
+    print(stats)
+    os.makedirs(output_dir, exist_ok=True)
+    add_async_task, join_async_tasks = hlp.get_async_queue(num_threads=12)
+
+    for measurement, score in itertools.product(columns_measurements, ['IoU', 'Surface DSC']):
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='Base Domain', style='Data Aug.', score=score, yscale='log', x_line='# Block')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='fold_train', style='Data Aug.', score=score, yscale='log', x_line='# Block')
+        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='Data Aug.', style=None, score=score, yscale='log', x_line='# Block')
+
+        col='Normalization'
+        row='Optimizer'
+        hue='fold_train'
+        style='Data Aug.'
+        score=score
+
+        stats_corr = hlp.get_corr_stats(
+            stats,
+            groupby=['# Block', col, row, hue, style],
+            columns=[measurement, score],
+            column_combinations=None
+        ).reset_index()
+        measurement_pval = '{}-{}_pval'.format(measurement, score)
+        measurement_corr = '{}-{}_corr'.format(measurement, score)
+        stats_corr.loc[stats_corr[measurement_pval] >= 0.01, measurement] = np.nan
+        stats_corr[measurement] = stats_corr[measurement_corr]
+        suffix = '{}-{}-{}-{}'.format(
+            'single' if col is None else col,
+            'single' if row is None else row,
+            'single' if hue is None else hue,
+            'single' if style is None else style,
+        )
+        add_async_task(
+            hlp.relplot_and_save,
+            outpath=os.path.join(
+                output_dir,
+                '{}-{}-corr-layered-{}.png'.format(measurement, score, suffix)
+            ),
+            data=stats_corr,
+            kind='line',
+            x='# Block',
+            y=measurement,
+            row=row,
+            row_order=None if row is None else stats_corr[row].sort_values().unique(),
+            col=col,
+            col_order=None if col is None else stats_corr[col].sort_values().unique(),
+            style=style if style in stats_corr else None,
+            hue=hue,
+            palette='cool',
+            aspect=2,
+            height=6,
+        )
+    
     columns_measurements_train = [
         'pca_src_noise_variance',
         #'pca_src_variance_ratio_cumsum_index_gt_90',
@@ -485,62 +634,43 @@ def plot_roughness_and_confidence_grouped():
         #'pca_dst_variance_ratio_cumsum_skewness',
         #'pca_dst_variance_ratio_cumsum_kurtosis',
 
+        'kmeans_src_inertia',
+        #'kmeans_src_n_iter',
+        'kmeans_dst_inertia',
+        #'kmeans_dst_n_iter',
+
         'norm_frob_weight',
         'norm_spectral',
     ]
-    stats_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'fold_test', 'domain_val']).agg(
-        trained_on=('trained_on', 'first'),
-        iou_score_mean=('iou_score_mean', 'first'),
-        dice_score_mean=('dice_score_mean', 'first'),
-        sdice_score_mean=('sdice_score_mean', 'first'),
-        optimizer=('optimizer', 'first'),
-        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
-        **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements
-        },
-        **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements_train
-        }
-    ).reset_index()
-
-    for measurement, score in itertools.product(columns_measurements, ['iou_score_mean', 'sdice_score_mean']):
-        print(measurement)
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row=None, score=score, palette='rainbow')
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score, palette='rainbow')
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer', score=score, palette='rainbow')
-        hlp.plot_scattered_and_layered(add_async_task, stats, stats_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score, palette='rainbow')
-
-    
-    
-    stats_train = stats.groupby(['trainer_short', 'fold_train', 'epoch', 'layer_pos']).agg(
-        iou_score_mean=('iou_score_mean', 'mean'),
-        dice_score_mean=('dice_score_mean', 'mean'),
-        sdice_score_mean=('sdice_score_mean', 'mean'),
-        optimizer=('optimizer', 'first'),
-        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
+    #stats = stats[stats['Domain'] == 'Training']
+    stats_train = stats.groupby(['trainer_short', 'fold_train', 'Epoch', '# Block', 'Domain']).agg(**{
+        'IoU': ('IoU', 'mean'),
+        'DSC': ('DSC', 'mean'),
+        'Surface DSC': ('Surface DSC', 'mean'),
+        'Optimizer': ('Optimizer', 'first'),
+        'Normalization': ('Normalization', 'first'),
+        'Data Aug.': ('Data Aug.', 'first'),
         **{
             column: (column, 'mean') for column in columns_measurements_train
         }
-    ).reset_index()
-    stats_train_meaned_over_layer = stats.groupby(['trainer_short', 'fold_train', 'epoch']).agg(
-        iou_score_mean=('iou_score_mean', 'mean'),
-        dice_score_mean=('dice_score_mean', 'mean'),
-        sdice_score_mean=('sdice_score_mean', 'mean'),
-        optimizer=('optimizer', 'first'),
-        optimizer_wd_bn=('optimizer_wd_bn', 'first'),
+    }).reset_index()
+    stats_train_meaned_over_layer = stats_train.groupby(['trainer_short', 'fold_train', 'Epoch', 'Domain']).agg(**{
+        'IoU': ('IoU', 'mean'),
+        'DSC': ('DSC', 'mean'),
+        'Surface DSC': ('Surface DSC', 'mean'),
+        'Optimizer': ('Optimizer', 'first'),
+        'Normalization': ('Normalization', 'first'),
+        'Data Aug.': ('Data Aug.', 'first'),
         **{
-            '{}_mean'.format(column): (column, 'mean') for column in columns_measurements_train
+            column: (column, 'mean') for column in columns_measurements_train
         }
-    ).reset_index()
+    }).reset_index()
     print(stats_train)
     print(stats_train_meaned_over_layer)
 
-    # for measurement, score in itertools.product(columns_measurements_train, ['iou_score_mean', 'sdice_score_mean']):
-    #     print(measurement)
-    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row=None, score=score)
-    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row='trainer_short', score=score)
-    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row='optimizer', score=score)
-    #     hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, row='optimizer_wd_bn', score=score)
+    for measurement, score in itertools.product(columns_measurements_train, ['IoU', 'Surface DSC']):
+        hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, col='Normalization', row='Optimizer', hue='fold_train', style='Data Aug.', score=score, yscale='log', x_line='# Block')
+        hlp.plot_scattered_and_layered(add_async_task, stats_train, stats_train_meaned_over_layer, measurement, output_dir, col='Optimizer', hue='Normalization', style='Data Aug.', score=score, x_line='# Block')#, yscale='log')
 
     join_async_tasks()
 
@@ -548,28 +678,23 @@ def plot_roughness_and_confidence_grouped():
 
 task = 'Task601_cc359_all_training'
 trainers = [
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_ep120_noDA__nnUNetPlansv2.1',
-
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nogamma__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_nomirror__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_norotation__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_SGD_ep120_noscaling__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120__nnUNetPlansv2.1',
     'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nogamma__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_nomirror__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_norotation__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_ep120_noscaling__nnUNetPlansv2.1',
 
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
-    # 'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_SGD_ep120_noDA__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120__nnUNetPlansv2.1',
+    'nnUNetTrainerV2_MA_noscheduler_depth5_wd0_bn_ep120_noDA__nnUNetPlansv2.1',
 ]
 folds = [
     'siemens15',
@@ -582,25 +707,9 @@ folds = [
 epochs = [10,20,30,40,80,120]
 
 
-#calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
-plot_roughness_and_confidence_grouped()
+# calc_roughness_and_confidence_grouped(task, trainers, folds, epochs)
 
-
-#TODO paper uses 4 differnt losses and store after each of 32 epochs => 128 models
-#     here 2 different optimizer 2 epochs 4 train folds => 16 models each with 2 * 6 test folds => 192 data points
-#TODO paper uses 198 "label-free" testing exams
-#     here 12 (scans per fold) * 4 (slices) => 48 testing exams
-#  but how can they use 198 testing exams???
-#  they use a dataset of 973 3D mri scans
-#  split 80% training 20% test
-#  => max number of test exams = 0.2 * 973 = 194.6!!!
-#  patches???
-#TODO paper uses mask in test data to sample well distributed samples. Still label free??
-#TODO which layers to consider?
-#     model 600 referenced in paper seems to define a layer as conv-norm-relu...
-#     here only .conv .tu .seg_outputs
-#TODO number of pca components needed for 80% variance seems to correlate with epochs and optimizer
-#     at least its lower for adam than for sgd
-#     its lower for 120 epochs for SGD and higher for 120 epochs for Adam
-#     its slightly lower for both if DA is used (execept sgd ge3)
-#TODO check for seg_output shift
+plot_roughness_and_confidence_grouped(
+    'data/csv/activations-roughness-and-confidence/activations-roughness-and-confidence-grouped-relu-and-residual-pca10c-gt-s6-b48-testaug*.csv',
+    'data/fig/activations-roughness-and-confidence/pca10c-gt-s6-b48-testaug'
+)

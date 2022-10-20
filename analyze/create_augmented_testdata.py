@@ -45,13 +45,13 @@ def get_augmentation_name(params):
 
 def create_augmentations(augmentations, input_base_path, output_base_path):
     EXT = '.nii.gz'
-    for path in glob.iglob(os.path.join(BASE_PATH, 'labelsTr', '*{}'.format(EXT))):
+    for path in glob.iglob(os.path.join(input_base_path, 'labelsTr', '*{}'.format(EXT))):
         filename = os.path.basename(path).replace(EXT, '')
         filename_img = '{}_0000{}'.format(filename, EXT)
         filename_seg = '{}{}'.format(filename, EXT)
         print(filename)
 
-        img = nb.load(os.path.join(BASE_PATH, 'imagesTr', filename_img))
+        img = nb.load(os.path.join(input_base_path, 'imagesTr', filename_img))
         seg = nb.load(path)
         header_img = img.header.copy()
         header_seg = seg.header.copy()
@@ -88,7 +88,7 @@ def create_augmentations(augmentations, input_base_path, output_base_path):
             seg_aug = nb.Nifti1Image(data_seg_aug.permute(1,2,0).numpy().astype(dtype_seg), seg.affine, header=header_seg)
             
 
-            output_dir = os.path.join(BASE_PATH, 'augmented', name)
+            output_dir = os.path.join(input_base_path, 'augmented', name)
             img_output_dir = os.path.join(output_dir, 'imagesTs')
             seg_output_dir = os.path.join(output_dir, 'labelsTs')
             os.makedirs(output_dir, exist_ok=True)
@@ -185,7 +185,6 @@ AUGMENTATIONS = [
     }
 ]
 
-#BASE_PATH = 'data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training'
 INPUT_BASE_PATH = 'archive/old/nnUNet-container/data/nnUNet_raw/nnUNet_raw_data/Task601_cc359_all_training/'
 OUTPUT_BASE_PATH = os.path.join(INPUT_BASE_PATH, 'augmented')
 plans = np.load('data/nnUNet_preprocessed/Task601_cc359_all_training/nnUNetPlansv2.1_plans_2D.pkl', allow_pickle=True)
